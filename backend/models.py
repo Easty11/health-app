@@ -447,6 +447,53 @@ class UserHrmax(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class UserHrAnchor(Base):
+    """A user's LTHR or RHR in force from a date — the threshold anchors of the per-class zone model
+    (design 0010; `user_hrmax` holds the third anchor, HRmax, and is unchanged).
+
+    Mirrors `user_hrmax` one-for-one in discipline: append-only (a row is never edited or deleted; every
+    change is a NEW row followed by a recompute); a DATED change (`restates_id` NULL) applies from its
+    `effective_from` forward only, at most one per user, kind and date; a RESTATEMENT (`restates_id` set)
+    corrects the row it points at, carries that row's date, stands in for it over its whole span, and
+    each row is restated at most once (chains are linear). `hr_zones.anchor_in_force` is the one resolver,
+    shared with `user_hrmax`.
+
+    `kind` is `lthr` or `rhr`. `provenance` is a closed set: `tested` (a field test), `observed` (a strap
+    reading from a session), `device_estimated` (a device's auto-detect — Garmin LTHR auto-detect; shown
+    as "retest" wherever the anchor is read) or `stated` (the operator's figure with no artefact). There is
+    no `estimated`: no age or population formula. RHR here is the stored, dated anchor the zones use (R3),
+    never a live daily device RHR. The writers are the Settings card route (`routers/hr_zones`) and nothing
+    else; the chat knowledge lane cannot reach it.
+    """
+    __tablename__ = "user_hr_anchors"
+    __table_args__ = (
+        Index("uq_user_hr_anchor_dated", "user_id", "kind", "effective_from", unique=True,
+              postgresql_where=text("restates_id IS NULL"),
+              sqlite_where=text("restates_id IS NULL")),
+        Index("uq_user_hr_anchor_restates", "restates_id", unique=True,
+              postgresql_where=text("restates_id IS NOT NULL"),
+              sqlite_where=text("restates_id IS NOT NULL")),
+        # A plain single-column self-reference, as `user_hrmax` (a composite key is refused by
+        # `scripts/retire_user.py`); "same user, same kind, same date" is the route's and the resolver's rule.
+        ForeignKeyConstraint(["restates_id"], ["user_hr_anchors.id"], name="fk_user_hr_anchor_restates"),
+        CheckConstraint("kind IN ('lthr', 'rhr')", name="ck_user_hr_anchor_kind"),
+        CheckConstraint("provenance IN ('tested', 'observed', 'device_estimated', 'stated')",
+                        name="ck_user_hr_anchor_provenance"),
+        CheckConstraint("restates_id IS NULL OR rationale IS NOT NULL", name="ck_user_hr_anchor_rationale"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    bpm: Mapped[int] = mapped_column(Integer, nullable=False)
+    provenance: Mapped[str] = mapped_column(String(20), nullable=False)
+    note: Mapped[str] = mapped_column(String(1000), nullable=False)
+    restates_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class HealthConnectSyncEvent(Base):
     """One row PER POST to /health-connect/sync — the client build fingerprint plus
     the fetch telemetry HCA sends under `client` / `fetchMeta` (HCA DECISIONS #40).

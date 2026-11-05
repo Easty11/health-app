@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../api'
 import GarminLaneHealth from '../components/GarminLaneHealth'
+import HRZonesCard from '../components/HRZonesCard'
 
 const CATEGORIES = [
   'Injury History',
@@ -307,6 +308,18 @@ export default function Settings() {
               ))}
             </div>
           )}
+        </section>
+
+        {/* ── Heart rate zones (design 0010): per-class bands, the anchors, the append form, the Garmin mirror ── */}
+        <section className="space-y-3" data-testid="hr-zones-section">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 mb-1">Heart rate zones</h2>
+            <p className="text-xs text-gray-500">
+              Cycling zones on % of lactate-threshold HR; every other sport on % of heart-rate reserve.
+              Anchors are dated and append-only; a new value re-zones every session.
+            </p>
+          </div>
+          <HRZonesCard showToast={showToast} />
         </section>
 
         {/* ── Knowledge Base ── */}

@@ -56,7 +56,12 @@ logger = logging.getLogger(__name__)
 # REASONED-PRIOR constants (provenance-labelled #32; tagged by FORMULA_VERSION_METABOLIC)
 # ---------------------------------------------------------------------------
 
-FORMULA_VERSION_METABOLIC = "metab-v1"
+# metab-v2 (design 0010, R1): the same Edwards weights over zone seconds from the per-class model (% of LTHR
+# for the cycling class, % of heart-rate reserve elsewhere) instead of % of HRmax. The bump re-derives the
+# whole history from source; the retired version's rows are removed on the first recompute so no second
+# series lingers in `load_events` (every reader selects by this constant).
+FORMULA_VERSION_METABOLIC = "metab-v2"
+RETIRED_METABOLIC_VERSIONS = ("metab-v1",)
 
 WINDOW_METABOLIC = "metabolic"        # lowercase — matches the load_metrics τ allowlist key
 UNIT_METABOLIC = "trimp_edw_au"       # Edwards zone-weighted TRIMP, arbitrary units (INV-2 unit-lock)
@@ -173,14 +178,17 @@ def compute_metabolic_load_events(
     # with no since/limit returns the user's FULL session set (arbitration sees
     # every session, never a window) ordered session_date desc.
     from reads.aerobic_reads import arbitrated_sessions
+    from reads.zone_reads import anchor_entries, anchor_rows, row_zoning
 
     rows = arbitrated_sessions(user_id, db)
+    anchors = anchor_entries(anchor_rows(db, user_id))
 
-    # Replace this version's rows for the user (idempotent recompute; tier0-v1 untouched).
+    # Replace this version's rows for the user (idempotent recompute; tier0-v1 untouched), and drop the
+    # retired metabolic versions' rows (a formula bump re-derives history; the old series must not linger).
     db.execute(
         delete(models.LoadEvent).where(
             models.LoadEvent.user_id == user_id,
-            models.LoadEvent.formula_version == FORMULA_VERSION_METABOLIC,
+            models.LoadEvent.formula_version.in_((FORMULA_VERSION_METABOLIC, *RETIRED_METABOLIC_VERSIONS)),
         )
     )
 
@@ -215,7 +223,10 @@ def compute_metabolic_load_events(
             formula_version=FORMULA_VERSION_METABOLIC,
             provenance={
                 "zone_seconds": ml.zone_seconds,
-                "zone_source": row.source,     # 'polar_flow_export' | 'health_connect'
+                "zone_source": row.source,     # 'polar_flow_export' | 'polar_v4' | 'health_connect'
+                # The basis that produced the zone seconds (derived on read, 0010 §4): 'lthr' | 'hrr' on the
+                # model, 'vendor' for a Polar row keeping Polar's own zones (the flagged fallback, R2).
+                "zoning_basis": row_zoning(db, user_id, row, anchors)["basis"],
                 "sport_name": row.sport_name,
                 "duration_minutes": row.duration_minutes,
                 "had_hr_avg": row.hr_avg is not None,

@@ -66,7 +66,20 @@ function normalizePolar(s) {
       z1_seconds: s.z1_seconds, z2_seconds: s.z2_seconds, z3_seconds: s.z3_seconds,
       z4_seconds: s.z4_seconds, z5_seconds: s.z5_seconds,
     },
+    // What zoned this row (design 0010): derived server-side, shown as sent under the zone bar.
+    zoning: s.zoning || null,
   }
+}
+
+// One provenance line under the zone bar: the class, the basis and the anchors that produced the zones, or that
+// the row keeps Polar's own zones. Rendered from the server's `zoning`; nothing is derived here.
+export function zoningLine(z) {
+  if (!z) return null
+  if (z.basis === 'vendor') return "Polar's own zones (not re-zoned on the platform model)"
+  if (z.basis === 'lthr') return `Zoned on %LTHR (${z.class_label} class) · LTHR ${z.anchors?.lthr} bpm`
+  if (z.basis === 'hrr') return `Zoned on %HRR (${z.class_label} class) · RHR ${z.anchors?.rhr} · HRmax ${z.anchors?.hrmax} bpm`
+  if (z.reason === 'no_anchor') return `Not zoned: no ${z.class === 'lthr' ? 'LTHR' : 'RHR / HRmax'} anchor in force for the ${z.class_label} class`
+  return null
 }
 
 // One row per bout: the endpoint returns every source's row with a derived `canonical` flag (read-time
@@ -350,7 +363,15 @@ function PolarDetail({ session, onBack, onFeedback }) {
           <div className="bg-gray-50 rounded-xl p-3 space-y-2">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">HR Zones</p>
             <HRZoneBar zones={zones} />
+            {zoningLine(session.zoning) && (
+              <p className="text-[11px] text-gray-400" data-testid="zoning-line" data-basis={session.zoning.basis || 'none'}>
+                {zoningLine(session.zoning)}
+              </p>
+            )}
           </div>
+        )}
+        {!Object.values(zones).some(v => v > 0) && session.zoning?.reason === 'no_anchor' && (
+          <p className="text-[11px] text-amber-600" data-testid="zoning-line" data-basis="none">{zoningLine(session.zoning)}</p>
         )}
 
         <button onClick={handleFeedback} disabled={sending}

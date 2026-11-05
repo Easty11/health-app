@@ -31,8 +31,22 @@ def _user(db, uid=1):
     db.commit()
 
 
-def _hrmax(db, uid, eff, bpm, prov="observed"):
+# RHR 0 reduces Karvonen (% of HRmax - RHR) to the retired %HRmax arithmetic exactly, so every bpm
+# expectation below (written against 173 / 190) still pins the fill under the per-class model. The
+# Polar-branch and LTHR-class tests at the end use real anchors.
+RHR0 = 0
+
+
+def _hrmax(db, uid, eff, bpm, prov="observed", rhr=RHR0):
+    """An HRmax row and, unless `rhr=None`, an RHR anchor of the same date (the `hrr` basis needs both)."""
     db.add(models.UserHrmax(user_id=uid, effective_from=eff, hrmax_bpm=bpm, provenance=prov, note="t"))
+    if rhr is not None and not db.query(models.UserHrAnchor).filter_by(user_id=uid, kind="rhr", effective_from=eff).first():
+        db.add(models.UserHrAnchor(user_id=uid, kind="rhr", effective_from=eff, bpm=rhr, provenance="stated", note="t"))
+    db.commit()
+
+
+def _anchor(db, uid, kind, eff, bpm, prov="stated", **kw):
+    db.add(models.UserHrAnchor(user_id=uid, kind=kind, effective_from=eff, bpm=bpm, provenance=prov, note="t", **kw))
     db.commit()
 
 
@@ -166,7 +180,7 @@ def test_a_new_hrmax_reflows_history_on_the_next_run(db_session):
     assert db_session.query(models.UserHrmax).count() == 2                # nothing edited or removed
 
 
-def test_no_hrmax_in_force_leaves_the_row_in_its_stage_one_state_and_is_counted(db_session):
+def test_no_anchor_in_force_leaves_the_row_in_its_stage_one_state_and_is_counted(db_session):
     _user(db_session)
     _user(db_session, 4)
     _hrmax(db_session, 1, date(2026, 6, 1), 173)                          # user 4 has none
@@ -177,17 +191,17 @@ def test_no_hrmax_in_force_leaves_the_row_in_its_stage_one_state_and_is_counted(
     assert hc_zone_enrich.enrich_user(db_session, 1)["zoned"] == 1
     out4 = hc_zone_enrich.enrich_user(db_session, 4)
     r = _fresh(db_session, r4)
-    assert out4["reasons"]["no_hrmax"] == 1 and out4["zoned"] == 0
+    assert out4["reasons"]["no_anchor"] == 1 and out4["zoned"] == 0
     assert _zones(r) == (None,) * 5 and r.hr_avg is None
     assert _zones(_fresh(db_session, r1)) != (None,) * 5                  # user 1 unaffected
 
 
-def test_a_session_before_the_first_effective_date_is_no_hrmax(db_session):
+def test_a_session_before_the_first_effective_date_is_no_anchor(db_session):
     _user(db_session)
     _hrmax(db_session, 1, date(2026, 9, 28), 173)
     row = _row(db_session, 1, "g1", S, E, session_date=date(2026, 9, 27))
     _samples(db_session, 1, GARMIN, S, 10, [120] * 60)
-    assert hc_zone_enrich.enrich_user(db_session, 1)["reasons"]["no_hrmax"] == 1
+    assert hc_zone_enrich.enrich_user(db_session, 1)["reasons"]["no_anchor"] == 1
     assert _zones(_fresh(db_session, row)) == (None,) * 5
 
 
@@ -246,7 +260,7 @@ def test_implausible_samples_are_dropped_and_counted_across_the_run(db_session):
 
 # ---- what the step does NOT touch -----------------------------------------------------------------------
 
-def test_it_writes_only_hc_zone_fields_and_never_arbitration_inputs_or_polar_rows(db_session):
+def test_it_writes_only_zone_fields_and_never_arbitration_inputs_or_a_polar_row_without_a_trace(db_session):
     _user(db_session)
     _user(db_session, 2)
     _hrmax(db_session, 1, date(2026, 6, 1), 173)
@@ -279,7 +293,7 @@ def test_rows_without_a_usable_interval_are_counted_not_classified(db_session):
 def test_every_reason_key_is_always_present_in_the_report(db_session):
     _user(db_session)
     out = hc_zone_enrich.enrich_user(db_session, 1)
-    assert set(out["reasons"]) == {"sparse", "no_same_writer_hr", "no_hrmax", "none"}
+    assert set(out["reasons"]) == {"sparse", "no_same_writer_hr", "no_anchor", "none"}
     assert out["rows"] == 0 and out["zoned"] == 0
 
 
@@ -362,9 +376,14 @@ def test_the_reference_bout_stays_one_canonical_bout_depositing_once(db_session)
     assert before == {r88.id: False, r89.id: False, r91.id: True}
 
     out = hc_zone_enrich.enrich_user(db_session, 1)
-    assert out["zoned"] == 2 and out["over_ceiling"] == 0
+    # All three zone: 88 and 89 from their own writers, 91 (polar_v4) from the fi.polar.polarflow trace of
+    # the same bout (R2's "samples exist" branch, 0010 row 1) — Polar's vendor zones are replaced.
+    assert out["zoned"] == 3 and out["over_ceiling"] == 0
+    assert out["polar_rezoned"] == 1 and out["polar_vendor_fallback"] == 0
     rows = {r.id: r for r in arbitrated_sessions(1, db_session)}
     assert all(aerobic_reads._data_tier(r) == 2 for r in rows.values())     # all three now carry zones
+    assert _zones(rows[r91.id]) == _zones(rows[r88.id])                     # the same trace, the same zones
+    assert _zones(rows[r91.id]) != (19, 208, 679, 539, 466)                 # not Polar's own split any more
     canonical = [i for i, r in rows.items() if r.canonical]
     assert canonical == [r91.id]                                            # 91 outranks HC (source rank)
 
@@ -377,21 +396,42 @@ def test_the_reference_bout_stays_one_canonical_bout_depositing_once(db_session)
     assert ev["events_written"] == 1 and ev["sessions_skipped_non_canonical"] == 2
     le = db_session.query(models.LoadEvent).one()
     assert le.source_ref == str(r91.id) and le.provenance["zone_source"] == "polar_v4"
+    assert le.provenance["zoning_basis"] == "hrr" and le.formula_version == "metab-v2"
 
 
 def test_the_reference_bout_still_deposits_once_if_the_polar_row_were_unzoned(db_session):
-    """The richness-first tier means a zoned HC twin DOES carry the bout when the Polar row has no
-    zones — and still exactly once (the winner is the HC row 88)."""
+    """An unzoned Polar row (the v4 list endpoint carries no zones) is restored from the H10 trace the
+    Polar Flow app wrote through Health Connect, so it is the richer twin again and carries the bout —
+    exactly once. Without that trace the zoned HC twin (88) would carry it instead (next test)."""
     _user(db_session)
     _hrmax(db_session, 1, date(2026, 6, 1), 173)
     r88, r89, r91 = _reference_bout(db_session)
     r91.z1_seconds = r91.z2_seconds = r91.z3_seconds = r91.z4_seconds = r91.z5_seconds = None
     r91.hr_avg = r91.hr_max = None
     db_session.commit()
-    hc_zone_enrich.enrich_user(db_session, 1)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["polar_rezoned"] == 1
     ev = load_events_metabolic.compute_metabolic_load_events(db_session, 1)
     assert ev["events_written"] == 1
-    assert db_session.query(models.LoadEvent).one().source_ref == str(r88.id)
+    assert db_session.query(models.LoadEvent).one().source_ref == str(r91.id)
+
+
+def test_an_unzoned_polar_row_with_no_trace_lets_the_zoned_hc_twin_carry_the_bout(db_session):
+    """The richness-first tier: when the Polar row has no zones AND no Polar Flow trace exists, the zoned HC
+    twin carries the bout — still exactly once (the winner is the HC row 88)."""
+    _user(db_session)
+    _hrmax(db_session, 1, date(2026, 6, 1), 173)
+    r88, r89, r91 = _reference_bout(db_session)
+    r91.z1_seconds = r91.z2_seconds = r91.z3_seconds = r91.z4_seconds = r91.z5_seconds = None
+    r91.hr_avg = r91.hr_max = None
+    db_session.commit()
+    db_session.query(models.HrSample).filter_by(source_package=POLAR_FLOW).delete()
+    db_session.commit()
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["polar_rezoned"] == 0 and out["polar_vendor_fallback"] == 1
+    ev = load_events_metabolic.compute_metabolic_load_events(db_session, 1)
+    assert ev["events_written"] == 1
+    assert db_session.query(models.LoadEvent).one().source_ref == str(r89.id)
 
 
 # ---- a restatement reflows through the chain step (#383, #384) ---------------------------------------
@@ -475,3 +515,166 @@ def test_an_incoherent_restatement_fails_the_step_loudly_and_changes_no_row(db_s
         hc_zone_enrich.enrich_user(db_session, 1)
     db_session.rollback()
     assert _zones(_fresh(db_session, row)) == before
+
+
+# ---- the per-class model: LTHR for the cycling class, HRR elsewhere (design 0010) --------------------
+# Real anchors here: HRmax 179, RHR 51 (reserve 128: hrr edges 115/128/141/154/167), LTHR 158
+# (lthr edges 0/128/143/149/158). 134 bpm is z2 under both; 120 bpm is z1 on HRR and z1 on LTHR;
+# 145 bpm is z3 on both; the retired %HRmax model would have put 134 in z3 (74.9%).
+
+def _real_anchors(db, uid=1, eff=date(2026, 3, 1), *, lthr=158, rhr=51, hrmax=179):
+    _hrmax(db, uid, eff, hrmax, rhr=None)
+    if rhr is not None:
+        _anchor(db, uid, "rhr", eff, rhr)
+    if lthr is not None:
+        _anchor(db, uid, "lthr", eff, lthr, prov="device_estimated")
+
+
+def test_a_cycling_row_zones_on_lthr_and_another_sport_on_hrr(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    bike = _row(db_session, 1, "bike", S, E, sport="Biking Stationary")          # the Echo bike via Garmin
+    walk_s = S + timedelta(hours=2)
+    walk = _row(db_session, 1, "walk", walk_s, walk_s + timedelta(minutes=10), sport="Walking")
+    _samples(db_session, 1, GARMIN, S, 10, [134] * 30 + [145] * 30)
+    _samples(db_session, 1, GARMIN, walk_s, 10, [134] * 30 + [145] * 30)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["zoned"] == 2 and out["by_basis"] == {"lthr": 1, "hrr": 1}
+    assert _zones(_fresh(db_session, bike)) == (0, 300, 300, 0, 0)       # 134 in 128-142, 145 in 143-148
+    assert _zones(_fresh(db_session, walk)) == (0, 300, 300, 0, 0)       # 134 in 128-140, 145 in 141-153
+    # the same 134 bpm under the retired %HRmax model: 74.9% of 179 was z3 (the brief's defect)
+    assert hr_zones.band_for(134, 179) == 3
+
+
+def test_a_cycling_row_without_an_lthr_anchor_is_no_anchor_while_other_sports_still_zone(db_session):
+    _user(db_session)
+    _real_anchors(db_session, lthr=None)
+    bike = _row(db_session, 1, "bike", S, E, sport="Indoor cycling")
+    walk_s = S + timedelta(hours=2)
+    walk = _row(db_session, 1, "walk", walk_s, walk_s + timedelta(minutes=10), sport="Walking")
+    _samples(db_session, 1, GARMIN, S, 10, [134] * 60)
+    _samples(db_session, 1, GARMIN, walk_s, 10, [134] * 60)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["reasons"]["no_anchor"] == 1 and out["zoned"] == 1
+    assert _zones(_fresh(db_session, bike)) == (None,) * 5
+    assert _zones(_fresh(db_session, walk)) == (0, 600, 0, 0, 0)
+
+
+def test_without_an_rhr_anchor_every_non_cycling_row_is_no_anchor(db_session):
+    """R3: RHR is the stored anchor, never a live device RHR — with none stored the HRR basis has no reserve."""
+    _user(db_session)
+    _real_anchors(db_session, rhr=None)
+    _row(db_session, 1, "walk", S, E, sport="Walking")
+    _samples(db_session, 1, GARMIN, S, 10, [134] * 60)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["reasons"]["no_anchor"] == 1 and out["zoned"] == 0
+
+
+def test_a_dated_rhr_change_applies_forward_and_a_restated_rhr_reflows(db_session):
+    _user(db_session)
+    _real_anchors(db_session)                                                   # RHR 51 from 1 Mar
+    spring = _row(db_session, 1, "spring", _utc(2026, 5, 4, 6), _utc(2026, 5, 4, 6, 10), sport="Walking",
+                  session_date=date(2026, 5, 4))
+    autumn = _row(db_session, 1, "autumn", _utc(2026, 9, 28, 6), _utc(2026, 9, 28, 6, 10), sport="Walking",
+                  session_date=date(2026, 9, 28))
+    for r in (spring, autumn):
+        _samples(db_session, 1, GARMIN, r.start_time, 10, [140] * 61)           # 140: z2 at RHR 51 (128-140)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, spring))[1] == 600 and _zones(_fresh(db_session, autumn))[1] == 600
+    _anchor(db_session, 1, "rhr", date(2026, 9, 1), 45)                         # dated: reserve 134, z3 from 139
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, spring))[1] == 600                        # before 1 Sep: unchanged
+    assert _zones(_fresh(db_session, autumn))[2] == 600                        # from 1 Sep: z3
+    seed = db_session.query(models.UserHrAnchor).filter_by(kind="rhr", effective_from=date(2026, 3, 1)).one()
+    _anchor(db_session, 1, "rhr", date(2026, 3, 1), 45, restates_id=seed.id, rationale="better read")
+    hc_zone_enrich.enrich_user(db_session, 1)
+    assert _zones(_fresh(db_session, spring))[2] == 600                        # restated: the spring reflows too
+    assert db_session.query(models.UserHrAnchor).count() == 4                  # append-only: nothing edited
+
+
+# ---- Polar rows (R2): re-zoned from the Polar Flow trace where it covers them, else vendor kept -------
+
+def _polar(db, ssid, start, stop, **kw):
+    return _row(db, 1, ssid, start, stop, source="polar_v4", sport="Indoor cycling",
+                z1_seconds=10, z2_seconds=20, z3_seconds=30, z4_seconds=40, z5_seconds=50, hr_avg=150, hr_max=170, **kw)
+
+
+def test_a_polar_row_covered_by_the_polar_flow_trace_is_rezoned_and_its_vendor_zones_replaced(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    p = _polar(db_session, "p1", S, E)
+    _samples(db_session, 1, POLAR_FLOW, S, 1, [134] * 601)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["polar_rezoned"] == 1 and out["polar_vendor_fallback"] == 0 and out["by_basis"]["lthr"] == 1
+    r = _fresh(db_session, p)
+    assert _zones(r) == (0, 600, 0, 0, 0) and r.hr_avg == 134 and r.hr_max == 134
+
+
+def test_a_polar_row_with_no_trace_keeps_polars_own_zones_and_is_counted_as_the_fallback(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    p = _polar(db_session, "p1", S, E)
+    _samples(db_session, 1, GARMIN, S, 1, [134] * 601)          # a Garmin trace is NOT a Polar trace
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["polar_rezoned"] == 0 and out["polar_vendor_fallback"] == 1 and out["changed"] == 0
+    r = _fresh(db_session, p)
+    assert _zones(r) == (10, 20, 30, 40, 50) and r.hr_avg == 150 and r.hr_max == 170
+
+
+def test_a_sparse_trace_leaves_polars_zones_and_a_missing_anchor_does_too(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    sparse = _polar(db_session, "sparse", S, E)
+    _samples(db_session, 1, POLAR_FLOW, S, 120, [134] * 5)       # 2-minute gaps: coverage ~0.5
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["reasons"]["sparse"] == 1 and out["polar_vendor_fallback"] == 1
+    assert _zones(_fresh(db_session, sparse)) == (10, 20, 30, 40, 50)
+    # no anchor for the class: the trace is not even read; vendor zones stay
+    _user(db_session, 2)
+    db_session.add(models.AerobicSession(user_id=2, source="polar_v4", source_session_id="p2", session_date=S.date(),
+                                         start_time=S, stop_time=E, sport_name="Indoor cycling",
+                                         z1_seconds=1, z2_seconds=2, z3_seconds=3, z4_seconds=4, z5_seconds=5))
+    db_session.commit()
+    out2 = hc_zone_enrich.enrich_user(db_session, 2)
+    assert out2["reasons"]["no_anchor"] == 1 and out2["polar_vendor_fallback"] == 1
+
+
+def test_a_rezoned_polar_row_is_stable_across_runs(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    p = _polar(db_session, "p1", S, E)
+    _samples(db_session, 1, POLAR_FLOW, S, 1, [134] * 601)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    before = _zones(_fresh(db_session, p))
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["changed"] == 0 and _zones(_fresh(db_session, p)) == before
+
+
+def test_the_polar_sample_writers_constant_is_the_reverse_by(db_session, monkeypatch):
+    """Empty tuple = pure vendor fallback for every Polar row (0010 row 1's reverse-by)."""
+    monkeypatch.setattr(hc_zone_enrich, "POLAR_SAMPLE_WRITERS", ())
+    _user(db_session)
+    _real_anchors(db_session)
+    p = _polar(db_session, "p1", S, E)
+    _samples(db_session, 1, POLAR_FLOW, S, 1, [134] * 601)
+    out = hc_zone_enrich.enrich_user(db_session, 1)
+    assert out["polar_rezoned"] == 0 and out["polar_vendor_fallback"] == 1
+    assert _zones(_fresh(db_session, p)) == (10, 20, 30, 40, 50)
+
+
+def test_metab_v2_recompute_is_idempotent_and_removes_the_retired_version(db_session):
+    _user(db_session)
+    _real_anchors(db_session)
+    row = _row(db_session, 1, "walk", S, E, sport="Walking")
+    _samples(db_session, 1, GARMIN, S, 10, [134] * 60)
+    hc_zone_enrich.enrich_user(db_session, 1)
+    db_session.add(models.LoadEvent(user_id=1, source="aerobic_sessions", source_ref=str(row.id), load_window="metabolic",
+                                    occurred_at=S, load=99.0, unit="trimp_edw_au", formula_version="metab-v1"))
+    db_session.commit()
+    first = load_events_metabolic.compute_metabolic_load_events(db_session, 1)
+    assert first["formula_version"] == "metab-v2" and first["events_written"] == 1
+    versions = [v for (v,) in db_session.query(models.LoadEvent.formula_version).all()]
+    assert versions == ["metab-v2"]                                            # the metab-v1 row is gone
+    load_events_metabolic.compute_metabolic_load_events(db_session, 1)
+    rows = db_session.query(models.LoadEvent).all()
+    assert len(rows) == 1 and rows[0].load == pytest.approx(10 * 2) and rows[0].provenance["zoning_basis"] == "hrr"

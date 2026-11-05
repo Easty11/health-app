@@ -32,6 +32,7 @@ from routers import freshness as freshness_router
 from routers import load as load_router
 from routers import appointments as appointments_router
 from routers import clinical_documents as clinical_documents_router
+from routers import hr_zones as hr_zones_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -116,6 +117,7 @@ app.include_router(freshness_router.router)
 app.include_router(load_router.router)
 app.include_router(appointments_router.router)
 app.include_router(clinical_documents_router.router)
+app.include_router(hr_zones_router.router)
 
 
 @app.get("/health")

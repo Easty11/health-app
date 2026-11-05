@@ -26,10 +26,15 @@ def _user(db, uid=1):
 
 
 def _hrmax(db, eff, bpm, *, restates=None, prov="observed"):
+    """An HRmax row; on its first call also the LTHR and RHR anchors the per-class model needs (the rows
+    here are `Indoor cycling`, the LTHR class), so the chain run zones them and flags the ceiling."""
     h = models.UserHrmax(user_id=1, effective_from=eff, hrmax_bpm=bpm, provenance=prov, note="t",
                          restates_id=restates,
                          rationale="a higher observed maximum" if restates else None)
     db.add(h)
+    if not db.query(models.UserHrAnchor).filter_by(user_id=1).first():
+        db.add(models.UserHrAnchor(user_id=1, kind="lthr", effective_from=eff, bpm=158, provenance="device_estimated", note="t"))
+        db.add(models.UserHrAnchor(user_id=1, kind="rhr", effective_from=eff, bpm=51, provenance="stated", note="t"))
     db.commit()
     return h
 

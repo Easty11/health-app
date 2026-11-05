@@ -49,6 +49,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 048 — spo2_nights + spo2_samples + breathing_disruption_intervals  FK to users (CASCADE) and to spo2_nights (CASCADE) — raw Garmin overnight SpO2 capture: a nightly parent (unique user, night, source) with sleep window, reading_count and gap_count, one row per SpO2 epoch exactly as sent, and the raw breathing-disruption intervals (Q150); HELD for operator release
 049 — capability provenance + tag side  four additive nullable columns (`capability_observations.administered_by/instrument/protocol`, `exercise_region_tags.side`) + index `(user_id, region_key, protocol)` — Q27 v1 provenance; HELD for operator release (hold (a))
 050 — garmin personal api  six new tables (`garmin_raw_payloads` append-only raw landing, `sleep_nights`, `spo2_hourly`, `daily_physiology`, `hr_zone_config_snapshots`, `integration_lane_status`) + nullable `user_integrations.key_expires_on/access_token_encrypted/access_token_expires_at` + `hrv_readings.transport`; all FK to users (CASCADE); HELD for operator release
+051 — user_hr_anchors  FK to users (CASCADE), self-FK (restates_id -> id) — the LTHR and RHR anchors of the per-class zone model (design 0010), append-only, dated vs restatement rows, partial unique keys, closed provenance; HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1417,6 +1418,8 @@ Hard constraint: HRmax must be measured from Polar H10 session data. Age-predict
 
 **Implemented for `health_connect` rows (Q159 stage 2, §041).** The bands above are `hr_zones.BAND_PCT` (integer percents 50/60/70/80/90, lower-inclusive, z5 open-topped); the sample source is `hr_samples`, not `health_metrics`; HRmax is the per-user dated `user_hrmax` row in force on the session date, provenance `tested`, `observed` (a chest-strap session maximum is measured) or `adjusted` (an observed maximum plus a documented correction, §043) — `estimated` does not exist. The hard constraint above stands unchanged.
 
+**Superseded by the per-class model (design 0010, §051).** The %HRmax table above is retired from zoning (`hr_zones.BAND_PCT` is kept only for the operator projection script). Zones are now threshold-anchored per sport class, `sport_classes.zone_basis_for` (Q164 exact match on the raw `sport_name`): the cycling class (`LTHR_SPORTS`) on % of LTHR, Friel — z1 < 81 | z2 81–89 | z3 90–93 | z4 94–99 | z5 100+ (no z1 floor); every other sport on % of heart-rate reserve (HRmax − RHR), Karvonen — z1 50–59 | z2 60–69 | z3 70–79 | z4 80–89 | z5 90+ (below 50 % covered, uncredited). Integer arithmetic; each band's lower edge in bpm is `ceil(pct × LTHR / 100)` or `RHR + ceil(pct × (HRmax − RHR) / 100)` (`hr_zones.zone_spec`). LTHR and RHR live in `user_hr_anchors` (§051), HRmax in `user_hrmax`; a missing anchor withholds the row (`no_anchor`), never a default. Polar rows are re-zoned from the `fi.polar.polarflow` Health Connect samples of the same bout where those cover it, else keep Polar's own zones (the flagged fallback); the per-row basis is derived on read (`reads.zone_reads.row_zoning`), never stored. The metabolic formula is `metab-v2` (same Edwards weights). The hard constraint on HRmax stands; RHR is the stored, dated anchor, never a live daily device RHR.
+
 ## Sleep Stage Confidence
 
 Sleep staging is accepted as input (no raw EEG alternative for consumer hardware) but confidence is systematically lower for deep sleep across all devices.
@@ -2079,3 +2082,36 @@ CREATE TABLE integration_lane_status (        -- mutable status row, not history
 **Writers:** `garmin_raw.land` (raw), `garmin_wellness` (sleep, daily HR into `hr_samples` as source `garmin` / package `personal_api`, hourly SpO2, body battery, stress, HR-zone config), `routers/garmin._sync_hrv_personal` and `scripts/garmin_personal_backfill` (HRV into `hrv_readings`), `garmin_raw.record_lane` (status). **Readers:** `reads.freshness_reads.garmin_alerts` only; no UI, MCP tool or engine reads the new tables, and a test pins that nothing under `cbti/`, `engine/` or `reads/` does.
 
 **Downgrade** drops the six tables and the four columns. It loses every landed payload and mapped row; all of it is re-fetchable from Garmin's Personal API (no lookback cap observed).
+
+### 051 — user_hr_anchors (the LTHR and RHR anchors of the per-class zone model; design 0010)
+
+Migration `e7b2a4c9d1f3` (revises `c4a8e2f6b190`). One new table, nothing altered; empty until the operator seeds it through the Settings card after the deploy. **HELD for the operator's release** (a schema migration): Railway runs `alembic upgrade head` at boot, so merging is the release. Hand-written (partial unique indexes and CHECKs). Engine parity: `tests/test_hr_anchors_schema.py` renders the migration's DDL and diffs it against `Base.metadata.create_all` (columns, nullability, uniques with predicates, FKs, CHECK text) on every run.
+
+```sql
+CREATE TABLE user_hr_anchors (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind           VARCHAR(10) NOT NULL,        -- 'lthr' | 'rhr'   (HRmax stays in user_hrmax, §041/§043)
+    effective_from DATE NOT NULL,               -- in force from this LOCAL date; a DATED row applies forward only
+    bpm            INTEGER NOT NULL,
+    provenance     VARCHAR(20) NOT NULL,        -- 'tested' | 'observed' | 'device_estimated' | 'stated'  (no 'estimated')
+    note           VARCHAR(1000) NOT NULL,      -- the evidence
+    restates_id    INTEGER REFERENCES user_hr_anchors(id),   -- the row this one corrects; NULL = a DATED row
+    rationale      VARCHAR(1000),               -- required on a restatement
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_user_hr_anchor_kind       CHECK (kind IN ('lthr', 'rhr')),
+    CONSTRAINT ck_user_hr_anchor_provenance CHECK (provenance IN ('tested', 'observed', 'device_estimated', 'stated')),
+    CONSTRAINT ck_user_hr_anchor_rationale  CHECK (restates_id IS NULL OR rationale IS NOT NULL)
+);
+CREATE INDEX ix_user_hr_anchors_id ON user_hr_anchors (id);
+CREATE INDEX ix_user_hr_anchors_user_id ON user_hr_anchors (user_id);
+CREATE UNIQUE INDEX uq_user_hr_anchor_dated    ON user_hr_anchors (user_id, kind, effective_from) WHERE restates_id IS NULL;  -- one DATED row per user, kind, date
+CREATE UNIQUE INDEX uq_user_hr_anchor_restates ON user_hr_anchors (restates_id)                   WHERE restates_id IS NOT NULL;  -- a row is restated at most once
+```
+
+- **Mirrors `user_hrmax`.** Append-only: a row is never edited or deleted; a DATED change applies forward only, a RESTATEMENT (same date as its target, `rationale` required) stands in for the row it corrects over its whole span and reflows history; chains are linear and resolve to their latest. The one resolver is `hr_zones.anchor_in_force` (= `hrmax_in_force`), shared with `user_hrmax`. As in §043, "same user, same kind, same date" is the writer's and the resolver's rule, not a composite FK (`scripts/retire_user.py` refuses those).
+- **Provenance.** `device_estimated` (a device's auto-detect, e.g. Garmin LTHR) is shown "retest" wherever the anchor is read; the flag is derived, not stored. RHR here is the stored, dated anchor the zones use (R3), never `daily_physiology.resting_hr_bpm`, `health_connect_syncs.hr_nadir_bpm` or `hr_zone_config_snapshots.rhr_7d_auto_bpm`.
+- **Writer.** `hr_anchors.append` (the `POST /hr-zones/anchors` route behind the Settings card) is the only writer; `tests/test_hr_anchors_schema.py` asserts nothing else constructs, updates or deletes the model. `POST /hr-zones/anchors/preview` plans without writing. The card refuses `kind='hrmax'` and names `scripts/set_hrmax.py`.
+- **Readers.** `hc_zone_enrich.enrich_user` (the chain step; every `aerobic_sessions` row, HC and Polar), `reads.zone_reads` (`GET /hr-zones/config`, the MCP `get_hr_zone_config` tool, the per-row `zoning` on `GET /integrations/polar/aerobic-sessions`), and `load_events_metabolic` (the `zoning_basis` in each `metab-v2` event's provenance).
+- **Rollout.** Until a user has both anchors in force, their `hrr`-class rows and `lthr`-class rows are withheld `no_anchor` and the `metab-v2` metabolic series is EMPTY, not wrong; the first anchor append forces the load chain and the history reflows.
+- **Downgrade refuses** while any row exists (an append-only ledger is never dropped silently).

@@ -134,6 +134,14 @@ def test_new_tables_are_not_read_by_the_cbti_engine_nor_by_any_arbiter():
         for f in files:
             if f in (root / "reads" / "recovery_night.py", root / "reads" / "snapshot_reads.py"):
                 continue                                         # the readers (Q243)
+            if f == root / "reads" / "zone_reads.py":
+                # The zone-config read (design 0010) shows the latest `hr_zone_config_snapshots` row on the
+                # Settings card's Garmin mirror strip as OBSERVATION ONLY; nothing zones from it (hr_zones.py is
+                # scanned here and stays clean), and it reads no sleep or physiology table.
+                text = f.read_text(encoding="utf-8")
+                assert not re.search(r"SleepNight|sleep_nights|DailyPhysiology|daily_physiology|Spo2Hourly|spo2_hourly"
+                                     r"|GarminRawPayload", text), f"{f} reads a Personal API table beyond the zone snapshot"
+                continue
             assert not forbidden.search(f.read_text(encoding="utf-8")), f"{f} reads a Personal API table"
     reader = (root / "reads" / "recovery_night.py").read_text(encoding="utf-8")
     assert "models.SleepNight" in reader and "models.DailyPhysiology" in reader

@@ -18,6 +18,9 @@ GARMIN = "com.garmin.android.apps.connectmobile"
 SHEALTH = "com.sec.android.app.shealth"
 POLAR_FLOW = "fi.polar.polarflow"
 HRMAX = {1: [(date(2026, 6, 1), 173)]}
+# RHR 0 reduces the Karvonen (%HRR) basis to the retired %HRmax arithmetic exactly, so the bpm
+# expectations written against 173 still pin the projection under the per-class model (design 0010).
+ANCHORS = {1: {"rhr": [(date(2026, 6, 1), 0)], "lthr": []}}
 
 
 def _utc(*a):
@@ -47,6 +50,10 @@ def _samples(db, pkg, start, step_s, bpms, uid=1):
     db.add_all(models.HrSample(user_id=uid, sample_time=start + timedelta(seconds=step_s * i), bpm=b,
                                source="health_connect", source_package=pkg) for i, b in enumerate(bpms))
     db.commit()
+
+
+def _rhr0(db):
+    db.add(models.UserHrAnchor(user_id=1, kind="rhr", effective_from=date(2026, 6, 1), bpm=0, provenance="stated", note="t"))
 
 
 def _index(db):
@@ -89,8 +96,9 @@ def test_the_projection_equals_what_the_chain_step_then_writes(db_session):
     rows = _mixed_scenario(db_session)
     db_session.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=173,
                                     provenance="observed", note="t"))
+    _rhr0(db_session)
     db_session.commit()
-    recs, _after = rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX)
+    recs, _after = rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX, anchors=ANCHORS)
     proj = {r["id"]: r for r in recs}
 
     hc_zone_enrich.enrich_user(db_session, 1)
@@ -106,7 +114,7 @@ def test_the_projection_equals_what_the_chain_step_then_writes(db_session):
 
 def test_near_threshold_rows_are_marked_and_far_rows_are_not(db_session):
     a, b, c, d, e = _mixed_scenario(db_session)
-    recs = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX)[0]}
+    recs = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX, anchors=ANCHORS)[0]}
     assert recs[d.id]["near"] is True and 0.55 <= recs[d.id]["coverage"] <= 0.65
     assert recs[a.id]["near"] is False and recs[b.id]["near"] is False         # 1.0 and 0.5: 0.1 away
     assert recs[c.id]["near"] is False                                          # no coverage computed
@@ -114,7 +122,7 @@ def test_near_threshold_rows_are_marked_and_far_rows_are_not(db_session):
 
 def test_over_ceiling_is_listed_and_never_changes_hrmax(db_session):
     *_, e = _mixed_scenario(db_session)
-    recs = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX)[0]}
+    recs = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX, anchors=ANCHORS)[0]}
     assert recs[e.id]["over_ceiling"] is True and recs[e.id]["hr_max"] == 185
     assert HRMAX == {1: [(date(2026, 6, 1), 173)]}
 
@@ -125,6 +133,7 @@ def test_it_writes_nothing_and_every_statement_is_a_select(db_session, monkeypat
     _mixed_scenario(db_session)
     db_session.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=173,
                                     provenance="observed", note="t"))
+    _rhr0(db_session)
     db_session.commit()
     import database
     monkeypatch.setattr(database, "SessionLocal", lambda: db_session)
@@ -163,7 +172,7 @@ def test_the_reference_bout_has_no_flip_and_no_trimp_delta_and_a_per_band_compar
     r88, r89, r91 = _reference_bout(db_session)
     rows = _all_rows(db_session)
     before = [rep._clone(s) for s in rows]
-    recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX)
+    recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX, anchors=ANCHORS)
     assert rep.canonical_flips(before, after) == []                            # 91 stays canonical
     assert rep.trimp_delta(before, after) == []                                # an already-scored bout adds nothing
     twins = rep.polar_twin_comparison(after, recs)
@@ -177,7 +186,7 @@ def test_a_zoned_hc_twin_flips_the_bout_when_the_polar_row_has_no_zones(db_sessi
     r88, r89, r91 = _reference_bout(db_session, polar_zoned=False)
     rows = _all_rows(db_session)
     before = [rep._clone(s) for s in rows]
-    _recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX)
+    _recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX, anchors=ANCHORS)
     flips = rep.canonical_flips(before, after)
     assert len(flips) == 1
     f = flips[0]
@@ -192,7 +201,7 @@ def test_a_zoned_hc_walk_adds_trimp_to_its_day(db_session):
     _samples(db_session, GARMIN, S, 10, [110] * 180)                            # z2 for 30 min
     rows = _all_rows(db_session)
     before = [rep._clone(s) for s in rows]
-    _recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX)
+    _recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX, anchors=ANCHORS)
     [(day, b, a)] = rep.trimp_delta(before, after)
     assert (day, b) == ("2026-09-27", 0.0) and a == pytest.approx(60.0)         # 30 min x weight 2
 
@@ -226,10 +235,11 @@ def _write_csvs(db, tmp_path):
 def test_timestamps_only_gives_exact_coverage_and_reasons_but_no_zones(db_session, tmp_path, capsys):
     a, b, c, d, e = _mixed_scenario(db_session)
     _write_csvs(db_session, tmp_path)
-    live = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX)[0]}
+    live = {r["id"]: r for r in rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX, anchors=ANCHORS)[0]}
 
     rc = rep.main(["--hc-zones", "--csv", str(tmp_path / "aero.csv"),
-                   "--record-sources-csv", str(tmp_path / "times.csv"), "--hrmax", "1=173@2026-06-01"])
+                   "--record-sources-csv", str(tmp_path / "times.csv"), "--hrmax", "1=173@2026-06-01",
+                   "--rhr", "1=0@2026-06-01"])
     out = capsys.readouterr().out
     assert rc == 0 and "TIMESTAMPS-ONLY" in out
     for row in (a, b, c, d, e):
@@ -247,8 +257,8 @@ def test_csv_mode_with_samples_agrees_with_the_db_projection(db_session, tmp_pat
     _write_csvs(db_session, tmp_path)
     by_user = rep.rows_from_csv(str(tmp_path / "aero.csv"))
     samples = rep.samples_from_csv(str(tmp_path / "samples.csv"))
-    csv_recs, _ = rep.project_hc_zones(by_user[1], samples, HRMAX)
-    db_recs, _ = rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX)
+    csv_recs, _ = rep.project_hc_zones(by_user[1], samples, HRMAX, anchors=ANCHORS)
+    db_recs, _ = rep.project_hc_zones(_all_rows(db_session), _index(db_session), HRMAX, anchors=ANCHORS)
     strip = lambda rs: sorted(({k: v for k, v in r.items()} for r in rs), key=lambda r: r["id"])
     assert strip(csv_recs) == strip(db_recs)
 
@@ -261,12 +271,12 @@ def test_hrmax_arg_parsing():
             rep.parse_hrmax_args([bad])
 
 
-def test_a_user_without_hrmax_projects_no_hrmax_and_the_report_says_so(db_session):
+def test_a_user_without_anchors_projects_no_anchor_and_the_report_says_so(db_session):
     _mixed_scenario(db_session)
-    recs, _ = rep.project_hc_zones(_all_rows(db_session), _index(db_session), {})
-    assert {r["reason"] for r in recs} == {"no_hrmax"}
+    recs, _ = rep.project_hc_zones(_all_rows(db_session), _index(db_session), {}, anchors={})
+    assert {r["reason"] for r in recs} == {"no_anchor"}
     text = rep.render_hc_zone_report(recs, [], [], [])
-    assert "no_hrmax=5" in text and "Projected zoned: 0" in text
+    assert "no_anchor=5" in text and "Projected zoned: 0" in text
 
 
 def test_the_projection_never_touches_the_rows_it_was_given(db_session):
@@ -276,7 +286,7 @@ def test_the_projection_never_touches_the_rows_it_was_given(db_session):
     _mixed_scenario(db_session)
     rows = _all_rows(db_session)
     snap = [(r.id, r.z1_seconds, r.z2_seconds, r.hr_avg, r.hr_max) for r in rows]
-    recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX)
+    recs, after = rep.project_hc_zones(rows, _index(db_session), HRMAX, anchors=ANCHORS)
     assert any(r["zones"] for r in recs)                                       # the projection did zone something
     assert [(r.id, r.z1_seconds, r.z2_seconds, r.hr_avg, r.hr_max) for r in rows] == snap
     assert not db_session.dirty
@@ -287,6 +297,7 @@ def test_the_projection_never_touches_the_rows_it_was_given(db_session):
 
 def _restated_seed(db, bpm=175):
     db.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=173, provenance="observed", note="t"))
+    _rhr0(db)
     db.commit()
     seed = db.query(models.UserHrmax).one()
     db.add(models.UserHrmax(user_id=1, effective_from=date(2026, 6, 1), hrmax_bpm=bpm, provenance="adjusted",

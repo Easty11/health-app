@@ -55,6 +55,8 @@ from engine import week_plan as week_plan_mod   # the plan's derivations (#316),
 from context_builder import CONCURRENT_STRENGTH_PHRASE, _uncounted_phrase, plan_of_record_stale   # the ONE plan-of-record STALE definition (#312/#319); the ONE `concurrent_strength` wording
 from current_state import current_state as _current_state   # plan, phase, phase_folders, week plan: one read
 from load_metrics import _local_day   # the single operator-local-day source
+from load_events_metabolic import FORMULA_VERSION_METABOLIC   # the metabolic events version, one definition
+from reads.zone_reads import format_zone_config, zone_config   # the zone-config read (design 0010, R7)
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -1037,7 +1039,7 @@ def get_readiness_snapshot() -> str:
 # aerobic acute:chronic ratio (ACWR) surface, retired in #255 once that transform landed —
 # the trigger #249 named. `_METAB_FORMULA_VERSION` is the metabolic events version and is
 # UNCHANGED by P3/P1.1 (only the strength lane went tier0-v2; the seed is version-shared).
-_METAB_FORMULA_VERSION = "metab-v1"
+_METAB_FORMULA_VERSION = FORMULA_VERSION_METABOLIC   # one constant (metab-v2 since design 0010), never a literal here
 _METAB_METRICS_VERSION = "banister-v4"
 _METAB_WINDOW = "metabolic"
 
@@ -1119,6 +1121,23 @@ def get_training_load() -> str:
     )
 
     return _format_training_load(rows)
+
+
+@mcp.tool()
+@_stamped
+def get_hr_zone_config() -> str:
+    """The heart-rate zone configuration in force: per sport class (cycling on % of LTHR, Friel;
+    every other sport on % of heart-rate reserve, Karvonen) the band percents and today's bpm
+    edges; the anchors (HRmax, LTHR, resting HR) in force with provenance, effective date and a
+    retest flag for a device-estimated value; any HRmax prompts; and what Garmin reports
+    (observation only). Read-only: anchors are appended through the Settings card (LTHR, RHR) or
+    the operator script (HRmax), never from here."""
+    user_id = _current_user_id()
+    db = SessionLocal()
+    try:
+        return format_zone_config(zone_config(db, user_id, today=_local_day()))
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------

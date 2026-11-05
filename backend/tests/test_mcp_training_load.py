@@ -11,6 +11,7 @@ These target the pure formatter `_format_training_load` over the shape `_db_rows
 (the `@mcp.tool()` wrapper adds only `_current_user_id()` + the metabolic-lane query, which
 need a live bearer token and are not the logic under test). Mirrors `test_mcp_lab_results`.
 """
+from load_events_metabolic import FORMULA_VERSION_METABOLIC
 from mcp_server import _format_training_load
 
 
@@ -59,5 +60,5 @@ def test_only_latest_day_is_served():
 def test_empty_metabolic_lane_is_a_clean_no_data_readout():
     out = _format_training_load([])
     assert "No metabolic load metrics yet." in out
-    assert "metab-v1 / banister-v4" in out
+    assert f"{FORMULA_VERSION_METABOLIC} / banister-v4" in out and FORMULA_VERSION_METABOLIC == "metab-v2"
     assert "acwr" not in out.lower()

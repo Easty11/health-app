@@ -60,3 +60,32 @@ STRENGTH_SPORTS_LOWER = frozenset(s.lower() for s in STRENGTH_SPORTS)
 def is_strength_sport(sport_name: Optional[str]) -> bool:
     """True iff `sport_name` is in STRENGTH_SPORTS (case-insensitive exact). NULL/blank → False."""
     return sport_name is not None and sport_name.lower() in STRENGTH_SPORTS_LOWER
+
+
+# ── LTHR_SPORTS — the cycling class, zoned on % of lactate-threshold HR (design 0010, R4) ────
+# Consumer: `hr_zones` through `zone_basis_for` (the zoning basis of every `aerobic_sessions` row),
+# and the zone config read (the card, the MCP tool). The LTHR anchor is a CYCLING threshold (the
+# operator's Garmin profile applies its LTHR to cycling and runs every other sport on %HRR), so the
+# class is the cycling names the writers emit — Polar Flow ids 2/18/38/5/118 (`import_polar.SPORT_NAMES`)
+# and Health Connect types 8/9 (`routers.health_connect.sport_name_for`) — and nothing else. Rowing,
+# elliptical and cross-trainer ergs stay on %HRR (0010 row 3). Same matching rule as the sets above
+# (Q164: exact on the raw device string, case-insensitive, no fuzzy match); unmapped and NULL → %HRR.
+# Static on purpose (not derived from phase `device_sports`, #302): a row's basis must not change
+# when a phase changes.
+LTHR_SPORTS = frozenset({
+    "Cycling", "Indoor cycling", "Road cycling", "Mountain biking", "Spinning",   # Polar
+    "Biking", "Biking Stationary",                                                # Health Connect
+})
+LTHR_SPORTS_LOWER = frozenset(s.lower() for s in LTHR_SPORTS)
+
+ZONE_BASIS_LTHR = "lthr"
+ZONE_BASIS_HRR = "hrr"
+ZONE_CLASS_LABELS = {ZONE_BASIS_LTHR: "cycling", ZONE_BASIS_HRR: "other sports"}
+
+
+def zone_basis_for(sport_name: Optional[str]) -> str:
+    """`"lthr"` iff `sport_name` is in LTHR_SPORTS (case-insensitive exact); else `"hrr"` (R4:
+    unmapped, blank and NULL all zone on heart-rate reserve)."""
+    if sport_name is not None and sport_name.lower() in LTHR_SPORTS_LOWER:
+        return ZONE_BASIS_LTHR
+    return ZONE_BASIS_HRR
