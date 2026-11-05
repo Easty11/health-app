@@ -26,6 +26,7 @@ import sys
 from datetime import date, timedelta
 from typing import Any
 
+import garmin_activity_metrics
 import garmin_personal_lanes as gpl
 import garmin_raw
 import garmin_selfeval
@@ -49,7 +50,9 @@ _DEFAULT_SWEEP_DAYS = 7
 # --days, a backfill) is honoured in full.
 WELLNESS_SWEEP_DAYS = 3
 
-_SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "skipped_needs_refresh", "errors")
+_SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "skipped_needs_refresh", "errors",
+                    "metrics_upserted", "metrics_errors",
+                    "stream_fetched", "stream_samples", "stream_thinned", "stream_param_fallback", "stream_errors")
 
 
 _SPO2_COUNTS = ("nights_fetched", "nights_inserted", "nights_replaced", "nights_unchanged", "nights_empty",
@@ -69,12 +72,23 @@ def _spo2_step(db, uid: int, factory, start: date, end: date) -> dict[str, Any]:
         return {"error": f"{type(exc).__name__}: {exc}"}
 
 
+def _selfeval_and_streams(db, uid: int, client) -> dict[str, Any]:
+    """The self-evaluation read (which also upserts the summary metrics from the same details), then the
+    activity HR streams not yet captured (`garmin_activity_metrics.sync_streams`, `garmin` /
+    `activity_details`). The stream pass is soft-fail on its own: its failures are `stream_errors`, never
+    the lane's `errors`, so a details hiccup does not mark the self-evaluation lane failed."""
+    out = garmin_selfeval.sync_user(db, uid, source=client, transport="personal_api")
+    out.update(garmin_activity_metrics.sync_streams(db, uid, client))
+    return out
+
+
 def _personal_selfeval_step(db, uid: int, transport=None) -> dict[str, Any]:
     """Self-evaluation capture through the Personal API (same `garmin_selfeval.sync_user` body, source
-    'garmin', transport 'personal_api'). Never raises; records the `personal_selfeval` lane."""
+    'garmin', transport 'personal_api'), then the activity HR streams. Never raises; records the
+    `personal_selfeval` lane."""
     return gpl.run_lane(
         db, uid, garmin_raw.LANE_PERSONAL_SELFEVAL,
-        lambda client: garmin_selfeval.sync_user(db, uid, source=client, transport="personal_api"),
+        lambda client: _selfeval_and_streams(db, uid, client),
         transport=transport)
 
 

@@ -12,6 +12,9 @@ inputs and writes its outputs:
   (`sample_writers_for`: `(source, source_package)` pairs of `hr_samples`):
   - a `health_connect` row reads `hr_samples` written by the SAME writer as the row
     (`source_package` equal, through Health Connect) — a ring's HR inside a Garmin bout is never used for it;
+    a row written by Garmin Connect may also read Garmin's own activity stream (`garmin` /
+    `activity_details`, R2), the same watch's trace at the details endpoint's resolution. The all-day
+    wellness lane (`garmin` / `personal_api`) is never read for a session;
   - a Polar row (`polar_v4`, `polar_flow_export`) reads the H10 trace of the same bout from the Polar
     writers (`POLAR_SAMPLE_WRITERS`): the Polar Flow app's Health Connect copy (`fi.polar.polarflow`)
     and the Flow export's own samples (`import_polar` writes them as `polar_flow_export`, both columns).
@@ -57,6 +60,14 @@ POLAR_EXPORT_WRITER: Writer = ("polar_flow_export", "polar_flow_export")
 POLAR_SAMPLE_WRITERS: tuple[Writer, ...] = (POLAR_FLOW_HC_WRITER, POLAR_EXPORT_WRITER)
 POLAR_SOURCES = ("polar_v4", "polar_flow_export")
 
+# A health_connect row written by Garmin Connect may also be zoned from Garmin's own activity HR stream (the
+# Personal API details endpoint, stored as `garmin` / `activity_details` by the self-evaluation lane; ruling
+# R2), densest stream alone (#506's rule). The all-day wellness lane (`garmin` / `personal_api`) is NEVER a
+# writer for a session. Removing the activity writer here is the reverse-by: the rows fall back to their
+# Health Connect trace on the next chain run.
+GARMIN_CONNECT_PACKAGE = "com.garmin.android.apps.connectmobile"
+GARMIN_ACTIVITY_WRITER: Writer = ("garmin", "activity_details")
+
 
 def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     """Aware-UTC view of a stored instant. SQLite hands timestamps back naive; Postgres hands
@@ -68,10 +79,14 @@ def _utc(dt: Optional[datetime]) -> Optional[datetime]:
 
 def sample_writers_for(row: models.AerobicSession) -> tuple[Writer, ...]:
     """The `hr_samples` writers (`(source, source_package)` pairs) a row may be zoned from: its own
-    Health Connect writer for a health_connect row (the same-writer rule); `POLAR_SAMPLE_WRITERS` for
-    a Polar row; nothing for any other source."""
+    Health Connect writer for a health_connect row (the same-writer rule), plus Garmin's activity
+    stream when that writer is Garmin Connect (the HC writer first, so a tie keeps the HC trace);
+    `POLAR_SAMPLE_WRITERS` for a Polar row; nothing for any other source."""
     if row.source == HEALTH_CONNECT:
-        return ((HEALTH_CONNECT, row.source_package or "unknown"),)
+        own: Writer = (HEALTH_CONNECT, row.source_package or "unknown")
+        if row.source_package == GARMIN_CONNECT_PACKAGE:
+            return (own, GARMIN_ACTIVITY_WRITER)
+        return (own,)
     if row.source in POLAR_SOURCES:
         return POLAR_SAMPLE_WRITERS
     return ()
@@ -191,7 +206,9 @@ def over_ceiling_prompts(db: Session, user_id: int) -> list[dict[str, Any]]:
     READ-ONLY, so the freshness read can carry it. Same definition as `zone_session`: samples inside
     [start, stop] from the row's own writer, inside the plausibility bounds, `top > hrmax` (equal is not
     over); a row with no usable interval or no HRmax in force is never over. The ceiling is HRmax under
-    either zoning basis.
+    either zoning basis. KNOWN GAP: this reads the row's Health Connect writer only, so a Garmin row whose
+    activity stream (`garmin` / `activity_details`) holds the over-ceiling sample is counted by the chain
+    report but not prompted here.
 
     A bout two writers recorded (a Polar row and the Garmin row inside it) is one ride, so it earns one
     prompt: the over-ceiling rows are grouped with the SAME arbitration the session lists use

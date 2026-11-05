@@ -130,6 +130,10 @@ class PersonalClient:
         """The (token, expiry) currently held, for the caller to persist."""
         return self._token, self._expires_at
 
+    def token_usable(self) -> bool:
+        """True when the cached bearer token will be reused (no exchange on the next request)."""
+        return self._token_usable()
+
     def _token_usable(self) -> bool:
         return (self._token is not None and self._expires_at is not None
                 and self._expires_at - _aware(self._now()) > REUSE_MARGIN)

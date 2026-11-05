@@ -74,6 +74,29 @@ def format_day_ratings(rated: Any) -> str:
     return "; ".join(parts) if parts else "—"
 
 
+def format_garmin_metrics(m: Any) -> str:
+    """The Garmin vendor-metrics suffix for a session line, e.g.
+    ` garmin=[kcal 612 TE 5.0 aerobic / 2.1 anaerobic load 276]`, or "" when the session carries none.
+
+    `m` is the session's placed Garmin metrics dict (the sessions API's `garmin_metrics`). Vendor composites, labelled as Garmin's:
+    display only, never Pocket load. A field Garmin did not send is left out, never printed as 0."""
+    if not m:
+        return ""
+    parts = []
+    if m.get("calories") is not None:
+        parts.append(f"kcal {m['calories']:.0f}")
+    te = []
+    if m.get("te_aerobic") is not None:
+        te.append(f"{m['te_aerobic']:.1f} aerobic")
+    if m.get("te_anaerobic") is not None:
+        te.append(f"{m['te_anaerobic']:.1f} anaerobic")
+    if te:
+        parts.append("TE " + " / ".join(te))
+    if m.get("training_load") is not None:
+        parts.append(f"load {m['training_load']:.0f}")
+    return f" garmin=[{' '.join(parts)}]" if parts else ""
+
+
 def format_also_recorded_by(twins: Any) -> str:
     """The Q201(b) twin suffix for a canonical session line (#418), e.g.
     ` also_recorded_by=[{"source": "health_connect", "source_package": "com.garmin.android.apps.connectmobile"}]`.

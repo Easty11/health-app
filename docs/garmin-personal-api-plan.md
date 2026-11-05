@@ -33,6 +33,7 @@ Endpoint map to adopt (from its `client.py`):
 | Stress | `/usersummary-service/stats/stress/daily/{start}/{end}` | – |
 | HR-zone config | `/biometric-service/heartRateZones/v2` | – |
 | Activity search / detail | `/activitylist-service/activities/search/activities` · `/activity-service/activity/{id}` | `start,limit,startDate,endDate` |
+| Activity details (HR stream) | `/activity-service/activity/{id}/details` | `maxChartSize,maxPolylineSize` (asked 100000 / 0; a 400 retries without them; thinning reported, not assumed) |
 
 Unknown, to probe before relying: server-side range caps on the three range endpoints, rate limits, and whether a fresh exchange invalidates the previous token (decides whether concurrent sweep + on-read refresh can race). Plan uses per-day calls except where a probe shows ranges are safe.
 

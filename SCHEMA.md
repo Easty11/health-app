@@ -50,6 +50,7 @@ Ordering is determined by FK dependencies. Do not reorder.
 049 — capability provenance + tag side  four additive nullable columns (`capability_observations.administered_by/instrument/protocol`, `exercise_region_tags.side`) + index `(user_id, region_key, protocol)` — Q27 v1 provenance; HELD for operator release (hold (a))
 050 — garmin personal api  six new tables (`garmin_raw_payloads` append-only raw landing, `sleep_nights`, `spo2_hourly`, `daily_physiology`, `hr_zone_config_snapshots`, `integration_lane_status`) + nullable `user_integrations.key_expires_on/access_token_encrypted/access_token_expires_at` + `hrv_readings.transport`; all FK to users (CASCADE); HELD for operator release
 051 — user_hr_anchors  FK to users (CASCADE), self-FK (restates_id -> id) — the LTHR and RHR anchors of the per-class zone model (design 0010), append-only, dated vs restatement rows, partial unique keys, closed provenance; HELD for operator release
+052 — garmin_activity_metrics  FK to users (CASCADE) — Garmin's per-activity summary metrics (kcal, Training Effect aerobic/anaerobic, Garmin load, respiration, intensity minutes, raw `summaryDTO`) upserted from the Personal API activity detail, unique (user, garmin_activity_id), no session link (placed by read-time overlap), plus the activity HR stream's fetch mark; DISPLAY ONLY; HELD for operator release
 ```
 
 **Alembic caveats** — autogenerate never produces these, always hand-written:
@@ -1757,7 +1758,7 @@ CREATE INDEX ix_user_hrmax_user_id ON user_hrmax (user_id);
 - **`hr_samples` is the only place a raw HR bpm lives.** `health_connect_record_sources` keeps a record's identity (type, start, writer) and never its bpm; before this table the only use of `bpm` was the daily median in `_aggregate_day`. The unique key lets a re-posted sample be insert-or-ignore on both engines (`INSERT ... ON CONFLICT DO NOTHING`, chunked), so HCA's 7-day rolling re-post costs no duplicate rows. Two writers' samples at one instant are two rows: the same-writer rule needs them apart. The HC sync fills it (`routers/health_connect._persist_hr_samples`, SAVEPOINT-isolated: a failure is reported in the sync response and never rolls back the day rows).
 - **`user_hrmax` is append-only.** *(Amended by §043: a restatement may share its target's date, and the plain unique key is replaced.)* A new value is a new row (a later `effective_from`; the same date is refused) followed by a recompute; a row is never edited or deleted. No route, no UI and no chat write path reaches it — the one writer is the operator script `scripts/set_hrmax.py` (`tests/test_hr_zones_schema.py` asserts nothing else constructs, updates or deletes the model).
 - **Readers.** `hc_zone_enrich.enrich_user` (the chain step) and the G2 projection in `scripts/arbitration_flip_report.py --hc-zones`; both call the pure `hr_zones.zone_session`. Nothing else reads either table.
-- **Writers of `hr_samples` since #506.** Three lanes, each its own `(source, source_package)`: the HC sync (`health_connect`, the writer package); the Garmin wellness daily HR (`garmin`, `personal_api`; §050); the Polar Flow export (`polar_flow_export` on both columns; `import_polar._store_export_samples`, insert-or-ignore, same transaction as the row, written for already-present sessions too). The zoning reads a row's permitted writers as `(source, source_package)` pairs (`hc_zone_enrich.sample_writers_for`): an HC row its own HC writer only; a Polar row the Polar Flow HC copy or the export, the densest alone. `hr_nadir` reads `health_connect` only.
+- **Writers of `hr_samples` since #506.** Four lanes, each its own `(source, source_package)`: the HC sync (`health_connect`, the writer package); the Garmin wellness daily HR (`garmin`, `personal_api`; §050); the Polar Flow export (`polar_flow_export` on both columns; `import_polar._store_export_samples`, insert-or-ignore, same transaction as the row, written for already-present sessions too); the Garmin activity HR stream (`garmin`, `activity_details`; §052). The zoning reads a row's permitted writers as `(source, source_package)` pairs (`hc_zone_enrich.sample_writers_for`): an HC row its own HC writer, plus the Garmin activity stream when that writer is Garmin Connect; a Polar row the Polar Flow HC copy or the export; the densest alone. The wellness lane is never read for a session. `hr_nadir` reads `health_connect` only.
 
 
 ### 042 — garmin_activity_selfevals (Q209 path a: immutable per-activity Garmin self-evaluation)
@@ -2116,3 +2117,41 @@ CREATE UNIQUE INDEX uq_user_hr_anchor_restates ON user_hr_anchors (restates_id) 
 - **Readers.** `hc_zone_enrich.enrich_user` (the chain step; every `aerobic_sessions` row, HC and Polar), `reads.zone_reads` (`GET /hr-zones/config`, the MCP `get_hr_zone_config` tool, the per-row `zoning` on `GET /integrations/polar/aerobic-sessions`, and the MCP `get_zone_coverage` tool: per-source counts of how every raw row is zoned, derived live from `row_zoning`; the chain report is never stored), and `load_events_metabolic` (the `zoning_basis` in each `metab-v2` event's provenance).
 - **Rollout.** Until a user has both anchors in force, their `hrr`-class rows and `lthr`-class rows are withheld `no_anchor` and the `metab-v2` metabolic series is EMPTY, not wrong; the first anchor append forces the load chain and the history reflows.
 - **Downgrade refuses** while any row exists (an append-only ledger is never dropped silently).
+
+### 052 — garmin_activity_metrics (Garmin's per-activity summary metrics; display only)
+
+Migration `a9d3f5b7c2e4` (revises `e7b2a4c9d1f3`). One new table, nothing altered. **HELD for the operator's release** (a schema migration): Railway runs `alembic upgrade head` at boot, so merging is the release. Keys from the operator's 6 Nov 2026 `--keys` probe of activity 24970929418 (`indoor_cycling`). Engine parity: `tests/test_garmin_activity_metrics_schema.py`.
+
+```sql
+CREATE TABLE garmin_activity_metrics (
+    id                     INTEGER PRIMARY KEY,
+    user_id                INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    garmin_activity_id     BIGINT NOT NULL,               -- > int32
+    start_time_gmt         TIMESTAMPTZ,                   -- summaryDTO.startTimeGMT, else the activity list's
+    duration_s             FLOAT,                         -- summaryDTO.duration, else the list's
+    calories               FLOAT,                         -- every metric: as received; a missing key is NULL
+    bmr_calories           FLOAT,
+    te_aerobic             FLOAT,                         -- <- trainingEffect (there is no aerobicTrainingEffect key)
+    te_anaerobic           FLOAT,                         -- <- anaerobicTrainingEffect
+    te_label               VARCHAR(64),                   -- <- trainingEffectLabel
+    training_load          FLOAT,                         -- <- activityTrainingLoad
+    resp_avg FLOAT, resp_max FLOAT, resp_min FLOAT,       -- <- avg/max/minRespirationRate
+    recovery_hr            FLOAT,                         -- <- recoveryHeartRate
+    intensity_min_moderate FLOAT, intensity_min_vigorous FLOAT,
+    water_estimated_ml     FLOAT,                         -- <- waterEstimated
+    body_battery_delta     FLOAT,                         -- <- differenceBodyBattery
+    summary_raw            JSONB NOT NULL,                -- the whole summaryDTO: a field wanted later needs no re-fetch
+    fetched_at             TIMESTAMPTZ NOT NULL,
+    hr_stream_fetched_at   TIMESTAMPTZ,                   -- the activity HR stream was fetched (once)
+    hr_stream_samples      INTEGER,                       -- samples it gave (null bpm skipped)
+    CONSTRAINT uq_garmin_activity_metric UNIQUE (user_id, garmin_activity_id)
+);
+CREATE INDEX ix_garmin_activity_metrics_id ON garmin_activity_metrics (id);
+CREATE INDEX ix_garmin_activity_metrics_user_id ON garmin_activity_metrics (user_id);
+```
+
+- **Display only.** Training Effect and Garmin load are vendor composites (the vendor_metrics rule above): shown vendor-labelled ("Garmin") on the session detail and in the MCP `get_recent_sessions` lines, never an input to `load_events`, the metabolic transform, the zoning or readiness. `tests/test_garmin_activity_metrics_guard.py` fails if any module outside the display path names the table.
+- **No session link (ruling R1).** `reads.garmin_metrics_reads.garmin_metrics_by_session` places a row on a session by read-time window overlap (`reads.srpe_reads._place`, the RPE placement rule), from `start_time_gmt` and `duration_s`. The sessions API (`GET /integrations/polar/aerobic-sessions`) carries the placed dict as `garmin_metrics` on canonical rows.
+- **Writers.** `garmin_selfeval.sync_user` upserts from the activity detail it already fetches (no extra request; soft-fail, `metrics_errors`); `garmin_activity_metrics.sync_streams` (the selfeval lane, after the read; up to 10 a night) sets the `hr_stream_*` columns; `scripts/garmin_activity_backfill.py` (operator, dry run by default) does both from 2026-03-01.
+- **The HR stream lives in `hr_samples`**, not here: `directHeartRate` by `directTimestamp` from `/activity-service/activity/{id}/details`, column positions resolved from `metricDescriptors` by key, written as `source = 'garmin'`, `source_package = 'activity_details'` (ruling R2), a writer distinct from the all-day `garmin` / `personal_api` wellness lane. `hc_zone_enrich.sample_writers_for` lets a `health_connect` row written by `com.garmin.android.apps.connectmobile` read it besides its own HC trace, the densest stream per bout alone (#506's rule); no other row type reads it and the wellness lane is never read for a session. The request asks `maxChartSize=100000` and `maxPolylineSize=0`, retries once without them on HTTP 400, and reports thinning (`totalMetricsCount` above the rows returned) with the effective interval.
+- **Downgrade** drops the table; every row is re-fetchable (the backfill).

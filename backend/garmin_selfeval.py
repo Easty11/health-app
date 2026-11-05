@@ -16,6 +16,11 @@ The store is INSERT-ONLY: a row is what Garmin said at `captured_at`. A row is i
 
 Reads (two GETs per new activity, plus one list GET per user per run) go through the user's Personal API
 client (`PersonalClient.get`), which only ever sends GETs: this module never writes to Garmin or reads HR.
+The SAME detail payload also carries Garmin's summary metrics (calories, Training Effect, Garmin load,
+respiration...): `garmin_activity_metrics.upsert_metrics` stores them, display only, at no extra request,
+committed on their own and soft-fail (`metrics_errors`), so a metrics failure never costs a rating. The
+activity HR stream is a separate details call made by the lane after this read
+(`garmin_activity_metrics.sync_streams`), never by this module.
 It runs inside `scripts.garmin_sync.sweep_garmin_hrv`, right after that user's HRV pull. The DI lane no longer
 reads self-evaluation (PR-B, #449), so the old no-refresh seam and its `skipped_needs_refresh` outcome are gone;
 the count stays in the result at 0 so the sweep summary keeps its shape. The sweep runs once a night (02:00
@@ -33,6 +38,7 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+import garmin_activity_metrics
 import models
 import srpe_store
 from scripts.garmin_selfeval_probe import ACTIVITY_LIST_PATH, ACTIVITY_PATH
@@ -124,23 +130,42 @@ def _list_item_fields(item: Any) -> tuple[int, datetime, datetime | None, str | 
     return aid, start, stop, (str(type_key)[:100] if type_key else None)
 
 
+def _upsert_metrics(db, user_id: int, aid: int, detail: Any, *, start: datetime, stop: datetime | None,
+                    now: datetime, out: dict[str, Any]) -> None:
+    """The activity's summary metrics from the SAME detail payload (no extra request), committed on their
+    own. Soft-fail: a failure is counted as `metrics_errors`, rolled back (the prior commit holds every
+    earlier write) and never stops the self-evaluation read."""
+    try:
+        dur = (stop - start).total_seconds() if stop is not None else None
+        if garmin_activity_metrics.upsert_metrics(db, user_id, aid, detail, now=now, start=start, duration_s=dur):
+            db.commit()
+            out["metrics_upserted"] += 1
+    except Exception as exc:  # noqa: BLE001 -- a metrics hiccup never costs the rating
+        db.rollback()
+        out["metrics_errors"] += 1
+        logger.warning("garmin metrics: activity %s not upserted: %s", aid, type(exc).__name__)
+
+
 def sync_user(db, user_id: int, *, source: Any, now: datetime | None = None,
               window_days: int = LIST_WINDOW_DAYS, transport: str = "personal_api") -> dict[str, Any]:
-    """One user's self-evaluation capture. Never writes to Garmin, never reads HR.
+    """One user's self-evaluation capture (and, from the same details, the summary metrics). Never writes
+    to Garmin, never reads the HR stream.
 
     ONE list GET since the last captured start (bounded by `window_days`), then ONE detail GET per
     activity that has no row yet, and per unrated activity due a re-check (start within `RECHECK_DAYS`,
     last observed over `RECHECK_MIN_GAP` ago). The list is processed oldest-first and the read STOPS at the
     first failure, so the last captured start never passes an unfetched activity.
 
-    Returns `{fetched, rated, unrated, skipped_needs_refresh, errors}` (counts; `skipped_needs_refresh` is
-    always 0 now, kept so the sweep summary keeps its shape). `fetched` counts detail records read; `rated`
-    and `unrated` the observations inserted from them.
+    Returns `{fetched, rated, unrated, skipped_needs_refresh, errors, metrics_upserted, metrics_errors}`
+    (counts; `skipped_needs_refresh` is always 0 now, kept so the sweep summary keeps its shape). `fetched`
+    counts detail records read; `rated` and `unrated` the observations inserted from them; `metrics_*` the
+    `garmin_activity_metrics` upserts from the same details (`garmin_activity_metrics.upsert_metrics`).
 
     `source` is an object with `.get(path, params=None)`: the Personal API lane passes its `PersonalClient`.
     """
     now = _utc(now) or datetime.now(timezone.utc)
-    out = {"fetched": 0, "rated": 0, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0}
+    out = {"fetched": 0, "rated": 0, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0,
+           "metrics_upserted": 0, "metrics_errors": 0}
 
     try:
         latest = _latest_by_activity(db, user_id)
@@ -169,6 +194,7 @@ def sync_user(db, user_id: int, *, source: Any, now: datetime | None = None,
                 logger.error("garmin selfeval: activity %s detail has no summaryDTO object (shape changed?)", aid)
                 out["errors"] += 1
                 break
+            _upsert_metrics(db, user_id, aid, detail, start=start, stop=stop, now=now, out=out)
             rpe, feel = parsed
             rated = rpe is not None or feel is not None
             if prior is not None and (rpe, feel) == (prior.rpe_raw, prior.feel) and rated:

@@ -746,6 +746,53 @@ class GarminActivitySelfEval(Base):
         ForeignKey("aerobic_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 
 
+class GarminActivityMetric(Base):
+    """Garmin's own summary metrics for one activity (the Personal API activity DETAIL's `summaryDTO`).
+
+    DISPLAY ONLY. Training Effect, Garmin load and the rest are vendor composites: they are shown
+    vendor-labelled on the session card and in the MCP session lines, and NEVER feed Pocket load or
+    readiness (a guard test pins that the metabolic transform and every readiness input stay out).
+
+    One row per (user, activity), upserted from the detail the self-evaluation lane already fetches
+    (`garmin_selfeval`) and by `scripts/garmin_activity_backfill.py`. Every metric column is nullable
+    and stored as received; a missing key is NULL, never an error. `te_aerobic` is `trainingEffect`
+    (the probe found no `aerobicTrainingEffect` key). `summary_raw` keeps the whole `summaryDTO`.
+
+    No link to an `aerobic_sessions` row (ruling R1): `reads.garmin_metrics_reads` places a row on a
+    session by read-time window overlap, from `start_time_gmt` and `duration_s`. `hr_stream_fetched_at`
+    / `hr_stream_samples` record the activity's HR stream fetch (written to `hr_samples` as
+    `garmin` / `activity_details`), so each stream is fetched once.
+    """
+    __tablename__ = "garmin_activity_metrics"
+    __table_args__ = (
+        UniqueConstraint("user_id", "garmin_activity_id", name="uq_garmin_activity_metric"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    garmin_activity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    start_time_gmt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bmr_calories: Mapped[float | None] = mapped_column(Float, nullable=True)
+    te_aerobic: Mapped[float | None] = mapped_column(Float, nullable=True)            # <- trainingEffect
+    te_anaerobic: Mapped[float | None] = mapped_column(Float, nullable=True)          # <- anaerobicTrainingEffect
+    te_label: Mapped[str | None] = mapped_column(String(64), nullable=True)           # <- trainingEffectLabel
+    training_load: Mapped[float | None] = mapped_column(Float, nullable=True)         # <- activityTrainingLoad
+    resp_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resp_max: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resp_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    recovery_hr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intensity_min_moderate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intensity_min_vigorous: Mapped[float | None] = mapped_column(Float, nullable=True)
+    water_estimated_ml: Mapped[float | None] = mapped_column(Float, nullable=True)
+    body_battery_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    summary_raw: Mapped[dict] = mapped_column(_JSONB, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    hr_stream_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hr_stream_samples: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class SessionRpeObservation(Base):
     """One observation of one activity's perceived effort, from any source (the source-neutral sRPE store).
 

@@ -326,6 +326,10 @@ class AerobicSessionOut(BaseModel):
     # (`lthr` cycling / `hrr` other), `basis` (`lthr` | `hrr` on the model, `vendor` for a Polar row
     # keeping Polar's own zones, None when withheld), the anchors and bpm edges in force, a `reason`.
     zoning: Optional[dict] = None
+    # Derived at read time (reads.garmin_metrics_reads, ruling R1): Garmin's own summary metrics for the
+    # Garmin activity this canonical row overlaps (kcal, Training Effect aerobic / anaerobic, Garmin load,
+    # ...), `vendor` = "Garmin". DISPLAY ONLY: never a load or readiness input. None when no activity overlaps.
+    garmin_metrics: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -344,5 +348,10 @@ def get_aerobic_sessions(
     computed over the full window before `limit` so a bout's counterpart is
     never truncated out of the comparison.
     """
+    from reads.garmin_metrics_reads import garmin_metrics_by_session
     from reads.zone_reads import annotate_zoning
-    return annotate_zoning(db, current_user.id, arbitrated_sessions(current_user.id, db, since=since, limit=limit))
+    rows = annotate_zoning(db, current_user.id, arbitrated_sessions(current_user.id, db, since=since, limit=limit))
+    placed = garmin_metrics_by_session(db, current_user.id, [r for r in rows if getattr(r, "canonical", True)])
+    for r in rows:
+        r.garmin_metrics = placed.get(r.id)
+    return rows

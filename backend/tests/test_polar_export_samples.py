@@ -355,8 +355,9 @@ def test_a_tie_keeps_the_writer_tuple_order_hc_copy_first(db_session):
 # ---- the Health Connect same-writer rule is unchanged ----------------------------------------------
 
 def test_a_health_connect_row_never_reads_export_samples(db_session):
-    """A Garmin HC row inside the same bout reads only Garmin's own HC samples: the export lane is a
-    Polar writer. With no Garmin samples it is `no_same_writer_hr`, exactly as before."""
+    """A Garmin HC row inside the same bout reads only Garmin's own writers (its HC trace, and since the
+    activity-stream ruling Garmin's activity stream): the export lane is a Polar writer. With no Garmin
+    samples it is `no_same_writer_hr`, exactly as before."""
     _user(db_session)
     _anchors(db_session)
     import_flow_export(db_session, 1, _zip({"training-session_1.json": _session("p1", samples=FLAT_134)}))
@@ -365,7 +366,8 @@ def test_a_health_connect_row_never_reads_export_samples(db_session):
                                stop_time=START_AW + timedelta(minutes=10), sport_name="Biking", duration_minutes=10)
     db_session.add(hc)
     db_session.commit()
-    assert hc_zone_enrich.sample_writers_for(hc) == (("health_connect", GARMIN),)
+    assert hc_zone_enrich.sample_writers_for(hc) == (("health_connect", GARMIN), ("garmin", "activity_details"))
+    assert hc_zone_enrich.POLAR_EXPORT_WRITER not in hc_zone_enrich.sample_writers_for(hc)
     out = hc_zone_enrich.enrich_user(db_session, 1)
     assert out["reasons"]["no_same_writer_hr"] == 1 and out["polar_rezoned"] == 1
     db_session.expire_all()

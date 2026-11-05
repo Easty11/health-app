@@ -40,7 +40,7 @@ from routers.knowledge import FINDING_DOMAINS
 from routers.labs import get_lab_results as _read_lab_results, StoredResultOut
 from routers.clinical_documents import document_out as _clinical_document_out, parse_filters as _parse_document_filters
 from reads.labs_reads import latest_lab_results
-from aerobic_format import format_aerobic_session, format_also_recorded_by, format_day_ratings, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
+from aerobic_format import format_aerobic_session, format_also_recorded_by, format_day_ratings, format_garmin_metrics, format_selfeval   # one aerobic renderer, shared with the in-app chat (A2)
 from reads.srpe_reads import aerobic_bout, hevy_bout, observed_ratings, session_ratings   # per-session RPE/feel for a session, any source (Q209)
 from reads.aerobic_reads import arbitrated_sessions, overlap_fraction, overlaps_workout, twins_by_canonical   # the canonical read-door (#Q161) and the ONE Hevy-overlap predicate (#309/A3.2)
 from reads.hevy_reads import counted_workouts   # the counted-Hevy read-door (#309)
@@ -745,7 +745,7 @@ def _hevy_detail(w) -> str:
 
 
 def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, days: int, since: date,
-                            twins=None, hevy_ratings=None) -> str:
+                            twins=None, hevy_ratings=None, garmin_metrics=None) -> str:
     """Newest first: one line per canonical aerobic session; a session that overlaps a counted
     workout (`_concurrent_strength_sessions`, the #414 test: each session on its own) is a SEGMENT of
     that workout, so a workout's segments are listed in start-time order with its Hevy detail once
@@ -755,7 +755,11 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
     RATINGS. `selfevals` is `{aerobic id: Rating}` and `hevy_ratings` is `{hevy_id: Rating}`, both the read
     door's answer. A counted Hevy workout is ONE bout with ONE rating, rendered ONCE on the workout's own line
     (the `Hevy only` header, or the detail line under its segments), never on a segment: a device row that is
-    a segment of a workout is not a separate counted session."""
+    a segment of a workout is not a separate counted session.
+
+    GARMIN METRICS. `garmin_metrics` is `{aerobic id: metrics dict}` (placed by overlap in
+    `get_recent_sessions`): Garmin's own kcal, Training Effect and load for the activity, appended as
+    `garmin=[...]`, vendor-labelled and display only."""
     linked = _concurrent_strength_sessions(sessions, counted)
     matched = {w.hevy_id for w in linked.values()}
     items: list[tuple[float, list[str]]] = []
@@ -769,6 +773,7 @@ def _format_recent_sessions(sessions, selfevals, counted, unadjudicated, fresh, 
         line = format_aerobic_session(s)
         if s.id in selfevals and not segment:       # a segment carries no rating of its own: the workout does
             line += format_selfeval(selfevals[s.id])
+        line += format_garmin_metrics((garmin_metrics or {}).get(s.id))
         return line + format_also_recorded_by((twins or {}).get(s.id))
 
     def _workout_rating(w) -> str:
@@ -836,7 +841,10 @@ def get_recent_sessions(days: int = 7) -> str:
     session's per-session RPE and its source (in_app, garmin) follow the line as selfeval=[...]; a Hevy
     workout carries its rating once, on its own line, never on a device segment. Ends
     with how long ago Health Connect and Polar last delivered. A session that other devices also
-    recorded carries also_recorded_by=[{source, source_package}] (identity only, no extra load)."""
+    recorded carries also_recorded_by=[{source, source_package}] (identity only, no extra load). A session
+    a Garmin activity overlaps carries garmin=[kcal, TE aerobic / anaerobic, load]: Garmin's own figures,
+    display only, never Pocket load."""
+    from reads.garmin_metrics_reads import garmin_metrics_by_session
     user_id = _current_user_id()
     since = _local_day() - timedelta(days=days)
     with SessionLocal() as _db:
@@ -862,8 +870,10 @@ def get_recent_sessions(days: int = 7) -> str:
             [aerobic_bout(s) for s in sessions if s.id not in linked] + [hevy_bout(w) for w in counted])
         selfevals = {k[1]: r for k, r in ratings.items() if k[0] == "aerobic"}
         hevy_ratings = {k[1]: r for k, r in ratings.items() if k[0] == "hevy"}
+        garmin = garmin_metrics_by_session(_db, user_id, sessions)
         return _format_recent_sessions(
-            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins, hevy_ratings)
+            sessions, selfevals, counted, unadjudicated, freshness(_db, user_id), days, since, twins, hevy_ratings,
+            garmin)
 
 
 # ---------------------------------------------------------------------------

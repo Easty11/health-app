@@ -75,6 +75,30 @@ test('a withheld row with no anchor in force says which anchor is missing', asyn
   expect(screen.getByTestId('zoning-line').textContent).toContain('no RHR / HRmax anchor in force')
 })
 
+test('a row Garmin also recorded shows vendor-labelled Garmin tiles as sent', async () => {
+  const garmin = { vendor: 'Garmin', garmin_activity_id: 1, calories: 612.4, te_aerobic: 5, te_anaerobic: 2.1,
+                   training_load: 276.3, te_label: 'VO2MAX' }
+  mockApi([row(6, 'Indoor cycling', LTHR, { garmin_metrics: garmin })])
+  await openDetail('Indoor cycling')
+  const tiles = screen.getByTestId('garmin-tiles')
+  expect(tiles.textContent).toContain('Garmin')
+  expect(tiles.textContent).toContain('612kcal')
+  expect(tiles.textContent).toContain('5.0TE aerobic')
+  expect(tiles.textContent).toContain('2.1TE anaerobic')
+  expect(tiles.textContent).toContain('276Garmin load')
+  expect(tiles.textContent).toContain("Garmin's label: VO2MAX")
+})
+
+test('a missing Garmin field shows a dash, and a row with no Garmin activity shows no tiles', async () => {
+  mockApi([row(7, 'Indoor cycling', LTHR, { garmin_metrics: { vendor: 'Garmin', calories: 300, te_aerobic: null, te_anaerobic: null, training_load: null } })])
+  await openDetail('Indoor cycling')
+  expect(screen.getByTestId('garmin-tiles').textContent).toContain('—TE aerobic')
+  cleanup()
+  mockApi([row(8, 'Walking', HRR)])
+  await openDetail('Walking')
+  expect(screen.queryByTestId('garmin-tiles')).toBeNull()
+})
+
 test('a row without the field renders no line (older payloads)', async () => {
   mockApi([row(5, 'Walking', undefined)])
   await openDetail('Walking')
