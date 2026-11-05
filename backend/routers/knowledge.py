@@ -1246,6 +1246,29 @@ def _typed_supersede_guard(entry_in: "KnowledgeEntryIn", existing: models.UserKn
             f"only rewrite its own proposals; the operator retires it via its resolve route",
             "operator_only",
         )
+    if entry_in.source == "chat" and chat_may_not_rewrite_operator_row(existing):
+        raise TypedEntryRefused(
+            f"{existing.type} {entry_in.key!r} was written or edited by you in the app, so chat may not "
+            f"rewrite it -- correct it with Edit on its card",
+            "operator_only",
+        )
+
+
+# R3 (DECISIONS_LOG "Coach proposals from clinical material are allowed; authority is chosen at
+# confirm; the coach never supersedes an operator-written row"): the operator's channel is `api` — the
+# in-app Edit on a proposed card (GH#617, `EDIT_NOTES_PREFIX` in `notes`), the injury card's Edit, and
+# the operator's own PowerShell writes all carry it; `chat` is the coach, `system` the engine's
+# defaults, `onboarding` the first-run flow. No new column: the discriminator is the row's `source`.
+OPERATOR_SOURCES = ("api",)
+
+
+def chat_may_not_rewrite_operator_row(row: models.UserKnowledgeEntry) -> bool:
+    """A typed entry the OPERATOR wrote or edited in-app (`source` in `OPERATOR_SOURCES`) is theirs:
+    chat may neither supersede nor deactivate it, whatever its status (R3). A confirmed row is already
+    `chat_may_not_retire`; this closes the `proposed` case — an operator-edited proposal that the coach
+    would otherwise rewrite on its next turn (the GH#608 E1 shape: a precise operator record replaced by
+    a coach paraphrase, with every reader seeing only the successor)."""
+    return row.type in TYPED_ENTRY_TYPES and row.source in OPERATOR_SOURCES
 
 
 def chat_may_not_retire(row: models.UserKnowledgeEntry) -> bool:
@@ -1266,6 +1289,10 @@ def operator_route_hint(row: models.UserKnowledgeEntry) -> str:
     t = row.type
     if t == "injury":
         return "resolve it yourself on the Injuries page (/injuries)"
+    if t in TYPED_ENTRY_TYPES and (row.value or {}).get("status") == "proposed":
+        # An operator-written or operator-edited PROPOSAL (R3): the correction path is Edit on its card.
+        return (f"edit it yourself with Edit on its card on the Injuries page (/injuries) or the "
+                f"morning check-in's saved screen (POST /knowledge/{t}s/{row.id}/edit)")
     if t == "constraint":
         return f"retire it yourself with POST /knowledge/constraints/{row.id}/resolve"
     if t == "finding":

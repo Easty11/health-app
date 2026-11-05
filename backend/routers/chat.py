@@ -57,6 +57,7 @@ from routers.knowledge import (
     TYPED_CHAT_DEFAULTS,
     TYPED_ENTRY_TYPES,
     chat_may_not_retire,
+    chat_may_not_rewrite_operator_row,
     expire_stale_entries,
     operator_route_hint,
     upsert_knowledge_entry,
@@ -1080,6 +1081,13 @@ def _process_knowledge_updates(
                         record(False, "operator_only",
                                f"✗ {_entry_noun(existing.type)} NOT removed: {key} — it is "
                                f"{(existing.value or {}).get('status')!r}, so only you can retire it: "
+                               f"{operator_route_hint(existing)}.", key=key)
+                    elif existing is not None and chat_may_not_rewrite_operator_row(existing):
+                        # R3: a row the operator wrote or edited in-app is theirs, proposed or not;
+                        # deactivating it by key would erase their record as surely as a rewrite.
+                        record(False, "operator_only",
+                               f"✗ {_entry_noun(existing.type)} NOT removed: {key} — you wrote or "
+                               f"edited it in the app, so only you can change it: "
                                f"{operator_route_hint(existing)}.", key=key)
                     elif existing:
                         existing.active = False

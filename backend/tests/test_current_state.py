@@ -462,6 +462,15 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
     # because the receipt itself is server-rendered and carries the guarantee. Declared: 11707 → 11707
     # (0, the rewrite is byte-neutral by construction); same excision, nothing else moves. Pinned by
     # tests/test_chat_write_receipt.py.
+    # RE-DECLARED (coach guidance for typed ledger writes, GH#627; GH#608 R2/R3; DECISIONS_LOG #499,
+    # #500 and the R1–R3 ruling entry): four sentences beside the write shapes — `parent_key` whenever
+    # the turn names the injury (constraint and finding), a resolved event is a finding and never a new
+    # or reopened injury row, never rewrite a row the user wrote or edited in-app, and the standing
+    # "never send asserted_by" — landed by TRIMMING existing wording (the "take the values from…" tail,
+    # the duplicate "Shall I record it?" example, "it leaves the probe queue", the appointment scope
+    # and `resolves` asides, the free-text append and "save proactively" sentences), operator-ruled
+    # (5 Nov 2026: trim, don't raise). Declared: 11707 → 11702 (−5); same excision, nothing else
+    # moves. Pinned by tests/test_coach_ledger_guidance.py.
     _KU_HEAD = "## Updating the Knowledge Base\n"
     _ku_new = context_builder._section_knowledge_update()
     assert new_prompt.endswith(_ku_new) and new_prompt.count(_KU_HEAD) == 1, (
@@ -476,7 +485,7 @@ def test_context_builder_output_unchanged_pre_post_refactor(db_session, monkeypa
         "the excised knowledge-update section is identical on both sides — this narrowing is "
         "now a no-op and should be removed rather than left hiding drift"
     )
-    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 11707), (
+    assert (len(_ku_old.encode()), len(_ku_new.encode())) == (1032, 11702), (
         "the knowledge-update byte difference moved — re-declare it (DECISIONS_LOG, this comment)"
     )
     old_prompt = old_prompt[:old_prompt.find(_KU_HEAD)]

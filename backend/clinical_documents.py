@@ -25,6 +25,8 @@ only: values are free text and are not scanned.
 
 NO INTERPRETATION. This module stores and reads documents back. It creates no finding, constraint
 or injury change from a document's content.
+A proposal the coach writes FROM a document's content is the coach's, proposal-gated like every
+typed write, through the knowledge write path and never this module (GH#608 R1 ruling, 5 Nov 2026).
 """
 from __future__ import annotations
 

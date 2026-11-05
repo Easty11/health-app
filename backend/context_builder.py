@@ -1131,15 +1131,18 @@ load restriction that should end one day) is a `type="constraint"`; your
 interpretation of their data is a `type="finding"`. You only ever PROPOSE one,
 and you write the proposal DIRECTLY: when the user asks you to record one, or
 gives you what one needs, emit the block in THAT reply. Never ask for
-confirmation in chat first ("Do you confirm?", "Shall I record it?"). Chat is
-not where a proposal is confirmed: the user confirms it on the Injuries page or the
-morning check-in's saved screen, with its Confirm button. A "yes" typed in chat confirms nothing and writes
-nothing. Never confirm, resolve, retract or deactivate a constraint or finding. A block that does not match the shape below is REFUSED
-whole and nothing retries it — the save happens only if you emit a corrected
-block in a later reply, so never promise a retry.
+confirmation in chat first ("Do you confirm?"). The user confirms it on the Injuries page
+or the morning check-in's saved screen, with its Confirm button. A "yes" typed in chat
+confirms nothing and writes nothing. Never confirm, resolve, retract or deactivate a
+constraint or finding. Never
+rewrite a row the user wrote or edited in-app (it is refused; they use Edit on its card).
+A block that does not match the shape below is REFUSED whole; the save happens only
+if a later reply carries a corrected block, so never promise a retry.
 
 CONSTRAINT `value` — allowed keys, and ONLY these: {", ".join(c_allowed)}.
 Never send {", ".join(never)} or any other key.
+- `parent_key`: the injury's key whenever the turn names the injury it belongs to;
+  a row that belongs to no injury carries none.
 - `scope` is an object in EXACTLY one of two shapes:
   - {{"tier": "{adv}", "text": "<the instruction>"}} — nothing else inside scope:
     no {" or ".join(engine_only)} (write any side into the text).
@@ -1147,14 +1150,14 @@ Never send {", ".join(never)} or any other key.
     — `side` optional (absent = bilateral), `text` optional; only with "kind": {_q(CONSTRAINT_ENGINE_KINDS)}.
   `tier` is exactly {_q(CONSTRAINT_TIERS)} — no other spelling. `text` goes INSIDE
   `scope`, never at the top level of `value`. Choose "{eng}" only when the region must
-  not be probed at all (it leaves the probe queue); a load limit on a region still
-  being trained is an "{adv}" "cap" with the side written into the text.
+  not be probed at all; a load limit on a region still being trained is an "{adv}"
+  "cap" with the side written into the text.
 - `kind`: {_q(CONSTRAINT_KINDS)}.
 - `exit`: an object with at least one of {exits}.
 - `review_by`: YYYY-MM-DD, always.
 - `region_keys` are taxonomy region keys; an unknown one is refused with the valid list.
 The examples below are SHAPE TEMPLATES: every <…> and value in them is a placeholder,
-never a fact about this user — take the values from the conversation and the data above.
+never a fact about this user.
 
 <knowledge_update>
 {{"type": "constraint", "key": "constraint_example_side_cap", "value": {{"scope": {{"tier": "{adv}", "text": "<side>: <movement> capped at <load>"}}, "kind": "cap", "exit": {{"on_condition": "<the condition that lifts it>"}}, "review_by": "2026-01-15"}}}}
@@ -1166,7 +1169,7 @@ never a fact about this user — take the values from the conversation and the d
 
 FINDING `value` — allowed keys, and ONLY these: {", ".join(f_allowed)}.
 Never send {", ".join(never)} or any other key.
-- `statement`: text. `domain`: {_q(FINDING_DOMAINS)}. `as_of`: YYYY-MM-DD.
+- `statement`: text. `domain`: {_q(FINDING_DOMAINS)}. `as_of`: YYYY-MM-DD. `parent_key`: as for a constraint.
 - `basis`: an object with {" and/or ".join(f"`{k}`" for k in FINDING_BASIS_FIELDS)} (at least one); each evidence
   item is {ev} with `door` one of {_q(FINDING_EVIDENCE_DOORS)}.
 - `marker_status` (optional): {_q(MARKER_STATUS_VALUES)}.
@@ -1205,14 +1208,13 @@ APPOINTMENT `value` — allowed keys, and ONLY these: {", ".join(allowed)}.
 - `kind`: {_q(APPOINTMENT_KINDS)}. `since`: YYYY-MM-DD, the last visit — required for {since_kinds}.
 - `scope`: {scope} — keys of the user's injury ledger rows, at least one. It MUST include the
   injury key of every constraint or finding an ask `resolves` (the brief reads one hop from these
-  keys and leaves any other row out): a new problem the user raises needs its injury row written
-  first, then its key added here. A write that links a row whose injury is not listed is refused.
+  keys): a new problem the user raises needs its injury row written first, then its key added
+  here. A write that links a row whose injury is not listed is refused.
 - `asks`: a list of {ask}; `priority` is 1..(number of asks), 1 = first;
   `resolves` (optional) is {res} naming the ONE constraint or finding the ask itself settles —
   the same body part and the same restriction. If no row in the ledger is that, leave `resolves`
-  out and say so; never link the nearest-sounding row or one for a different body part (a knee
-  scan does not settle a lumbar constraint). A wrong link also pulls that row's review question
-  into the ask;
+  out and say so; never link the nearest-sounding row or one for a different body part. A wrong
+  link also pulls that row's review question into the ask;
   `options` (optional) is a list of {opt} — only as the user states them or asks you
   to draft them, framed as what each answer would mean, never as a recommendation.
 - `logistics`: a list of text. `detail`: text or null. `audience` (optional): {_q(APPOINTMENT_AUDIENCES)}.
@@ -1258,7 +1260,7 @@ def _injury_write_shape() -> str:
     return f"""INJURY `value` — allowed keys, and ONLY these: {", ".join(core)}, plus the optional
 keys below. Never send {", ".join(never)} or any other key.
 - `body_part`: exactly one of {_q(INJURY_BODY_PARTS)} — an alias (a tendon, a structure,
-  a side in the name) is refused, naming the part to use.
+  a side) is refused, naming the part to use.
 - `side`: {_q(INJURY_ENUMS["side"])}. `signal_type`: {_q(INJURY_ENUMS["signal_type"])}.
 - `ra_flare`: true or false. `detail`: text or null.
 - Optional, sent only when the user states it: `onset_on` (YYYY-MM-DD); `course`: {_q(INJURY_ENUMS["course"])};
@@ -1267,7 +1269,10 @@ keys below. Never send {", ".join(never)} or any other key.
   ACTIVE injury row this episode belongs to); `recurrence_of` (the key of an earlier injury row of
   this user, active or resolved).
 - A lasting restriction is never written on the injury: it is a `type="constraint"` proposal
-  parented to the injury (advisory unless it names taxonomy regions)."""
+  parented to the injury (advisory unless it names taxonomy regions).
+- An event described as already resolved is a `type="finding"` (domain "injury", parented to
+  the standing injury row where one exists), never a new or reopened injury row; a resolved
+  episode's key is never reused."""
 
 
 # Free-text categories the coach may write. "Injury History" and "Constraints" are DELIBERATELY
@@ -1291,10 +1296,10 @@ a JSON block anywhere in your response:
 
 PREFERRED: submit writes by calling the `record_knowledge_updates` tool in that same
 reply. Its `updates` is an ARRAY with one JSON object per update, each exactly the object
-shown in the examples in this section (the `<knowledge_update>` wrapper in an example only
-marks where the object goes; with the tool you pass the object itself and write no wrapper).
-Several updates are ONE call with several items. If you do embed blocks instead, put ONE
-JSON object in each block and nothing after its closing brace.
+shown in the examples in this section (an example's `<knowledge_update>` wrapper only
+marks where the object goes; the tool takes the bare object). Several updates are ONE
+call. If you do embed blocks instead, put ONE JSON object in each block and nothing
+after its closing brace.
 
 Valid categories: {", ".join(KNOWLEDGE_UPDATE_CATEGORIES)}.
 
@@ -1318,8 +1323,8 @@ body part, side, signal type); with one, a `type="constraint"` proposal parented
 injury. Quote the workout date and the exercise in the proposal's `text`
 ("<YYYY-MM-DD>, <exercise>: <the note>"). Never write it to a free-text category.
 
-Use this proactively — whenever the user mentions something new about their
-training, body, or preferences, save it without being asked. Examples:
+Save proactively, whenever the user mentions something new about their training,
+body or preferences. Examples:
 - They mention a niggling pain → a structured `type="injury"` entry, not free text
 - They share a new goal or target → save to "Goals"
 - They discover an exercise they can't do → propose a `type="constraint"` parented to that injury (advisory unless it names taxonomy regions)
@@ -1329,10 +1334,8 @@ training, body, or preferences, save it without being asked. Examples:
 
 {_appointment_write_shape()}
 
-If an entry for that category already exists, the new content will be appended.
-The block will be removed from your visible response and replaced with a
-confirmation line. You do not need to ask permission to save — just do it and
-mention what you saved in your reply.
+A free-text block appends to its category. Each block is removed from your visible
+response and replaced with a confirmation line; mention what you saved.
 
 A write happens ONLY when your reply contains the block. If the user answers
 "yes" to something you offered to record, that reply MUST contain the block. A
