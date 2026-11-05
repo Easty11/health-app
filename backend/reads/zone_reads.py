@@ -127,8 +127,7 @@ def zone_config(db: Session, user_id: int, *, today: date) -> dict[str, Any]:
         "as_of": today.isoformat(),
         "classes": class_specs(entries, today),
         "anchors": anchors,
-        "default_effective_from": (earliest_session_date(db, user_id) or today).isoformat(),
-        "r8_pending": True,     # the seed-date rule (R8) awaits the operator's OK; the date stays editable
+        "default_effective_from": (earliest_session_date(db, user_id) or today).isoformat(),   # R8; editable
         "hrmax_prompts": over_ceiling_prompts(db, user_id),
         "garmin": {"profile": GARMIN_PROFILE, "snapshot": latest_garmin_snapshot(db, user_id)},
     }

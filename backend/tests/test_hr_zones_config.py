@@ -122,7 +122,7 @@ def test_the_config_read_carries_classes_anchors_retest_default_date_and_the_gar
     assert a["lthr"]["in_force"]["provenance"] == "device_estimated" and a["lthr"]["retest"] is True
     assert a["rhr"]["retest"] is False and a["rhr"]["writable"] is True and len(a["rhr"]["entries"]) == 1
     assert cfg["default_effective_from"] == (S - timedelta(days=200) + timedelta(hours=10)).date().isoformat()
-    assert cfg["r8_pending"] is True
+    assert "r8_pending" not in cfg        # R8 is ruled (design 0010 row 4); the default date is the rule, not a proposal
     assert cfg["garmin"]["profile"]["cycling"]["basis"] == "%LTHR" and cfg["garmin"]["profile"]["default"]["bands"][1] == "60-69"
     assert cfg["garmin"]["snapshot"]["lthr_bpm"] == 158 and cfg["garmin"]["snapshot"]["rhr_7d_auto_bpm"] == 49
     assert cfg["hrmax_prompts"] == []

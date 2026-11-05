@@ -93,7 +93,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // R8 (pending the operator's OK): a kind with no entry yet defaults to the earliest session date; editable.
+  // R8 (ruled 2026-11-05, design 0010 row 4): a kind with no entry yet defaults to the earliest session date; editable.
   useEffect(() => {
     const a = cfg.anchors[kind]
     setEffectiveFrom(a?.in_force ? '' : (cfg.default_effective_from || ''))
@@ -147,7 +147,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
       </div>
       {!cfg.anchors[kind]?.in_force && (
         <p className="text-[11px] text-gray-500" data-testid="r8-note">
-          First entry: the date defaults to the earliest session (R8, pending the operator's OK); change it if the value held from a different date.
+          First entry: the date defaults to the earliest session (R8, the best current estimate); change it if the value held from a different date.
         </p>
       )}
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence (required): e.g. Garmin auto-detect 2026-10-28" className={input} data-testid="anchor-note" />

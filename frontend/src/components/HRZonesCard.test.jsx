@@ -31,7 +31,6 @@ const CFG = {
     rhr: { kind: 'rhr', label: 'Resting HR', in_force: entry(3, 51, 'stated', '2026-03-01'), retest: false, entries: [entry(3, 51, 'stated', '2026-03-01')], writable: true, writer: null },
   },
   default_effective_from: '2026-03-01',
-  r8_pending: true,
   hrmax_prompts: [{ id: 9, date: '2026-11-05', sport: 'Biking', hr_max: 181, hrmax_in_force: 179 }],
   garmin: {
     profile: { cycling: { basis: '%LTHR', bands: ['<81', '81-89', '90-93', '94-99', '100+'] }, default: { basis: '%HRR', bands: ['50-59', '60-69', '70-79', '80-89', '90-100'] } },
