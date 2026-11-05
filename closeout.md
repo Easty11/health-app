@@ -1,10 +1,10 @@
-# Close-out — 5 Nov 2026: zone model build (design 0010; `DECISIONS_LOG` #502; GH#634, GH#635 filed; PR HELD for release)
+# Close-out — 5 Nov 2026: zone model build (design 0010; `DECISIONS_LOG` #502; GH#634, GH#635 filed; released and merged, `37bfdbd`; anchors not yet seeded)
 
 ## Real commits this session
 
 Session opened at health-app master `66d69d3` (the merge of PR 633, the previous close-out). Maxima at open: `DECISIONS_LOG` #501, no open `fork` issue. At close: #502 on the branch (resolved at master max #501; re-resolve if master advances before the release lands), still no open `fork` issue, GH#634 and GH#635 filed (`build`).
 
-One harness-assigned branch, `claude/confident-shannon-ch8hwv`, one PR, held: it carries a schema migration and a load-meaning change (one-way door), so it is not self-merged.
+One harness-assigned branch, `claude/confident-shannon-ch8hwv`, two PRs: PR 636 (the build; a one-way door, held until the operator said `merge`, then landed by Code end-to-end: merge `37bfdbd`, all checks green on `1d5e4c9`) and the post-merge docs-only flip from the restarted branch (this file, the BRANCHES and ROADMAP rows, the CLAUDE.md pointer).
 
 | Commit | What |
 |---|---|
@@ -15,9 +15,10 @@ One harness-assigned branch, `claude/confident-shannon-ch8hwv`, one PR, held: it
 | `49575f2` feat(load): metab-v2, the metabolic formula version bumps with the zone model; retired-version rows removed; zoning basis in provenance (R1) | `FORMULA_VERSION_METABOLIC = "metab-v2"`, `RETIRED_METABOLIC_VERSIONS`, `zoning_basis` in each event's provenance |
 | `ab6c8db` feat(api): zone config read, anchor preview and append with the forced choice, per-row zoning on sessions, MCP get_hr_zone_config (R6, R7) | `reads/zone_reads.py`, `hr_anchors.py`, `routers/hr_zones.py`, `AerobicSessionOut.zoning`, the MCP tool, the constant import in `mcp_server`; `tests/test_hr_zones_config.py` |
 | `86db308` feat(settings): Heart rate zones card (bands, anchors, forced choice with bpm preview, Garmin mirror); one provenance line under the WorkoutPanel zone bar | `HRZonesCard.jsx` on Settings, `zoningLine` under `HRZoneBar`; `HRZonesCard.test.jsx` (6), `WorkoutPanel.zoning.test.jsx` (5) |
-| the `gov(zone-model)` commit | `DECISIONS_LOG` #502, the ROADMAP NOW row, the BRANCHES row, the issue numbers in design 0010, this file |
+| `1d5e4c9` gov(zone-model): DECISIONS_LOG #502 (R1 to R8, rulings rows 1, 2, 3, 5); ROADMAP and BRANCHES rows; GH#634, GH#635 in design 0010; close-out | the governance batch of PR 636 |
+| the post-merge `gov(zone-model-landed)` commit | the BRANCHES row to DONE, the ROADMAP row, the CLAUDE.md pointer, this file (a second PR; it cannot name its own hash) |
 
-The last one cannot name its own hash here; read it with `git log --first-parent -1` on the branch. No migration applied, no prod write, no load recompute against prod, no `user_hrmax` row written, edited or deleted. Tests: backend 4,508 passed locally with one pre-existing failure (`test_current_state` runs `git show 3360ed5:…`, which a shallow clone cannot see; CI checks out full depth), frontend 577 passed.
+**Landed and verified.** PR 636 merged at `37bfdbd` (5 Nov 2026, after the operator's `merge`). `deploy-check` run 18 SUCCESS on `37bfdbd`; Railway backend deployment `4cd47a49` and frontend `c9c154c6` both SUCCESS matched on `commitHash`; the backend boot log shows `Running upgrade c4a8e2f6b190 -> e7b2a4c9d1f3`. No prod data write by Code, no recompute run by Code, no `user_hrmax` row written, edited or deleted. `user_hr_anchors` is empty. Tests: backend 4,508 passed locally with one pre-existing failure (`test_current_state` runs `git show 3360ed5:…`, which a shallow clone cannot see; CI checks out full depth), frontend 577 passed.
 
 Tracker writes this session (outside the tree): GH#634 `build` (Polar per-second sample ingest, the R2 "samples not stored" branch), GH#635 `build` (Garmin per-activity time-in-zone ingest, R5).
 
@@ -38,7 +39,7 @@ No `PENDING` item came in from a `;cc` chat close-out. The session was driven by
 
 ## Cold-resume handoff
 
-**Current sprint (ROADMAP NOW).** Zone model: BUILT, HELD for the operator's release (this row). Ledger UX follow-ups (GH#622 to GH#629): PR-A and the ruling landed 5 Nov; the rest UNSTARTED. Coach ledger writes (GH#612 to GH#617): UNSTARTED. Injury lifecycle in-app (design 0009): branches landed; its remaining rows unchanged. Wake-day capture: DONE, three-morning gate OWED. The other NOW rows are OWED to the operator or Code as their cells say and did not move.
+**Current sprint (ROADMAP NOW).** Zone model: DONE (merged `37bfdbd`, deployed, migration applied); the anchors are not yet seeded, so the metabolic series is empty until the operator does. Ledger UX follow-ups (GH#622 to GH#629): PR-A and the ruling landed 5 Nov; the rest UNSTARTED. Coach ledger writes (GH#612 to GH#617): UNSTARTED. Injury lifecycle in-app (design 0009): branches landed; its remaining rows unchanged. Wake-day capture: DONE, three-morning gate OWED. The other NOW rows are OWED to the operator or Code as their cells say and did not move.
 
 **v1 triage of NOW.** Zone model — See (a Z2 ride reads and deposits as Z2) and Know (the conditioning quota counts load the device agrees with). Ledger UX, coach ledger writes, injury lifecycle — Know and Walk in. Wake-day capture and lane visibility — Loop. Missed-PM catch-up, data freshness, plan/schedule tools — Loop / See, DONE and riding for their owed checks. RPE fallback (Q231) — See, OWED (Code once the gate opens). Source hierarchy (#365) and the Polar relabel limbs — OWED (Luke), serving See / Know; neither moved this session and neither is a demotion candidate: each waits on a named operator act.
 
@@ -48,6 +49,6 @@ No `PENDING` item came in from a `;cc` chat close-out. The session was driven by
 
 **Not touched this session (named so it is not read as finished).** No feature work outside the zone model: the ledger UX defects GH#623 to GH#629 and the coach ledger writes GH#612 to GH#617 stood still; the RPE fallback (Q231), the source hierarchy ruling (#365), the Polar relabel limbs, the appointment reconcile leg, the three-morning wake-day gate, the single-row HC bout deposit read (#384 item 4) — all unchanged, all gated on the operator acts their rows name. GH#634 and GH#635 are new `build` issues; neither is started. No companion-app (`health-connect-app`) work. No CLAUDE.md change: nothing landed on master this session, so the Recent-landings block is unchanged (the pointer belongs to the release session).
 
-**The single clearest next action (operator).** Decide the release of PR `claude/confident-shannon-ch8hwv` (one-way door: migration `e7b2a4c9d1f3` + `metab-v2`). On release, Code lands it end-to-end (FEEDBACK §1 row on held PRs): re-read master's max and re-resolve #502 if master advanced → merge (`--merge`, delete branch) → `deploy-check` on the merge commit (#491) → confirm the migration applied in the boot log. Then the operator seeds, through Settings → Heart rate zones: LTHR 158 `device_estimated` (Garmin auto-detect; reads "retest") and RHR 51 `stated`, each as a dated change on the R8 default date (the earliest session date) or a date of their choosing; each Save forces the chain. Then read `GET /hr-zones/config` (or the MCP `get_hr_zone_config`) and the first chain report's `polar_rezoned` / `polar_vendor_fallback` counts, and open an Echo bike Z2 ride on its card: its provenance line should read "Zoned on %LTHR (cycling class) · LTHR 158 bpm" and its bar should be Z2. Until the anchors are seeded, every row is `no_anchor` and the `metab-v2` series is empty, not wrong.
+**The single clearest next action (operator).** Seed the anchors, through Settings → Heart rate zones: LTHR 158 `device_estimated` (Garmin auto-detect; reads "retest") and RHR 51 `stated`, each as a dated change on the R8 default date (the earliest session date) or a date of their choosing; each Save forces the chain. Then read `GET /hr-zones/config` (or the MCP `get_hr_zone_config`) and the first chain report's `polar_rezoned` / `polar_vendor_fallback` counts, and open an Echo bike Z2 ride on its card: its provenance line should read "Zoned on %LTHR (cycling class) · LTHR 158 bpm" and its bar should be Z2. Until the anchors are seeded, every row is `no_anchor` and the `metab-v2` series is empty, not wrong.
 
 **Second action (operator).** Rule R8 (0010 row 4): if OK, the card's default date becomes the rule; if not, say what the seed date should be.

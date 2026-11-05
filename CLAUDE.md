@@ -330,11 +330,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **HR zones are threshold-anchored per sport class (cycling on %LTHR, every other sport on %HRR) over dated, append-only LTHR and RHR anchors the Settings card seeds; the metabolic formula is `metab-v2`; GH#634 and GH#635 filed.** Code - Canonical home: `DECISIONS_LOG.md` #502; design 0010.
+
 - **Confirmed rows are visible and resolvable on their injury card at any time, and GH#608 is ruled: coach proposals from clinical material are allowed proposal-gated, authority is chosen at confirm, and the coach never supersedes an operator-written row.** Code - Canonical home: `DECISIONS_LOG.md` #501.
 
 - **Unparented constraints stay legal with re-parenting as the operator's Edit, and a resolved past event is a finding, never an injury row; the 5 Nov ledger UX defects are filed (GH#622 to GH#629).** Code - Canonical home: `DECISIONS_LOG.md` #499, #500.
-
-- **A proposal can be edited before confirm or decline (a superseding proposal, the coach's original kept), and the coach's reply carries a server-rendered receipt of what it wrote.** Code - Canonical home: `DECISIONS_LOG.md` #497, #498.
 
 
 
