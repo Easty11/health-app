@@ -28,6 +28,7 @@ from sqlalchemy import text
 
 import models
 from hr_zones import BAND_PCT, HrmaxEntry
+from load_events_metabolic import FORMULA_VERSION_METABOLIC
 from load_events_metabolic import EDWARDS_WEIGHTS, compute_metabolic_load
 from load_metrics import TAU_FATIGUE_DAYS, compute_window_series
 from scripts import trimp_weighting_projection as tw
@@ -386,7 +387,7 @@ def _seed(db):
         sess[sid] = a
     db.flush()
 
-    def ev(ref, uid, win="metabolic", ver="metab-v1", src="aerobic_sessions", load=15.0):
+    def ev(ref, uid, win="metabolic", ver=FORMULA_VERSION_METABOLIC, src="aerobic_sessions", load=15.0):
         db.add(models.LoadEvent(user_id=uid, source=src, source_ref=str(ref), load_window=win, occurred_at=_utc(10),
                                 load=load, unit="trimp_edw_au", formula_version=ver))
     ev(1, 1, load=15.0)                       # selected
