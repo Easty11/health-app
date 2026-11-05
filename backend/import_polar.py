@@ -14,12 +14,18 @@ export that predates this ingest fills the samples without touching the row. The
 (`hc_zone_enrich`, `POLAR_SAMPLE_WRITERS`) then re-zones the Polar row on the model instead of
 keeping Polar's own zone totals.
 
-The sample path is read as `exercises[0].samples.heartRate[].{dateTime, value}` (`_hr_samples`);
-`dateTime` is local like `startTime` and takes the session's `timezoneOffsetMinutes`. An export
-that carries no samples at that path writes none, loudly: the summary's `hr_samples_found` is 0
-while `found` is not, and the row keeps the vendor fallback. `--keys` prints the key NAMES the
-first session carries (top level, `exercises[0]`, and the sample groups) so the path can be
-checked against a real export without printing a value.
+The sample path is `exercises[0].samples.samples[]`, a list of streams `{type, intervalMillis,
+values}` (`_hr_samples`); the `HEART_RATE` stream's `values[i]` is the bpm at `startTime +
+i * intervalMillis`, `startTime` being local and taking the session's `timezoneOffsetMinutes`
+exactly as the row's own `start_time` does. This is the shape the operator's `--keys` probe read
+off the real export on 2026-11-06 (the first member: `HEART_RATE`, 1000 ms, 793 floats for
+792463 ms); the path #506 first shipped (`exercises[0].samples.heartRate[].{dateTime, value}`)
+was a guess the probe disproved, and it is gone, not kept as a fallback. A member with no
+`HEART_RATE` stream writes none, loudly: the summary's `hr_samples_found` is 0 while `found` is
+not, and the row keeps the vendor fallback. `--keys` prints the key NAMES the first session
+carries (top level, `exercises[0]`, and the sample block) and, for EVERY member, each stream's
+type, `intervalMillis`, value count and null count (never a value), so the next shape drift is
+visible in one run.
 
 Usage (from backend/, venv activated):
     python import_polar.py --zip /path/to/polar-user-data-export.zip --email user@example.com
@@ -183,16 +189,30 @@ SPORT_NAMES: dict[str, str] = {
 }
 
 
+def _session_tz(data: dict) -> timezone:
+    """The session's local offset: `timezoneOffsetMinutes`, 0 when absent."""
+    return timezone(timedelta(minutes=int(data.get("timezoneOffsetMinutes", 0))))
+
+
+def _local_dt(s: str | None, tz: timezone) -> datetime | None:
+    """THE conversion of an export clock string to a stored instant: a naive string is local and
+    takes the session's offset `tz`; a string carrying its own offset keeps it. `_parse_session`
+    stores the row's `start_time` / `stop_time` through this, and `_hr_samples` anchors every
+    sample on the same call, so the samples and the row share one clock form: one instant on
+    Postgres (timestamptz), and on the SQLite suite, which stores an aware value naive WITHOUT
+    converting (FEEDBACK section 49), the same naive local clock as the row they must fall inside."""
+    if not s:
+        return None
+    dt = datetime.fromisoformat(s)
+    return dt.replace(tzinfo=tz) if dt.tzinfo is None else dt
+
+
 def _parse_session(data: dict) -> dict | None:
     """Return a dict of AerobicSession field values, or None if unparseable."""
-    tz_offset = data.get("timezoneOffsetMinutes", 0)
-    tz = timezone(timedelta(minutes=int(tz_offset)))
+    tz = _session_tz(data)
 
     def parse_dt(s: str | None) -> datetime | None:
-        if not s:
-            return None
-        dt = datetime.fromisoformat(s)
-        return dt.replace(tzinfo=tz) if dt.tzinfo is None else dt
+        return _local_dt(s, tz)
 
     start_time = parse_dt(data.get("startTime"))
     if not start_time:
@@ -250,47 +270,73 @@ def _parse_session(data: dict) -> dict | None:
     }
 
 
-def _session_tz(data: dict) -> timezone:
-    """The session's local offset, exactly as `_parse_session` reads it for `startTime`."""
-    return timezone(timedelta(minutes=int(data.get("timezoneOffsetMinutes", 0))))
+HR_STREAM_TYPE = "HEART_RATE"
 
 
-def _hr_samples(data: dict) -> list[tuple[datetime, int]]:
-    """The per-sample HR of one export session as `(aware UTC time, bpm)`, from
-    `exercises[0].samples.heartRate[].{dateTime, value}`; `[]` when the path is absent.
-
-    `dateTime` is local, like `startTime`, so it takes the session's `timezoneOffsetMinutes`
-    unless it carries its own offset, and is returned aware in THAT offset, the same form
-    `_parse_session` gives the row's `start_time` / `stop_time`: one instant on Postgres
-    (timestamptz), and on the SQLite suite, which stores an aware value naive WITHOUT converting
-    (FEEDBACK section 49), the same naive clock as the row it must fall inside. A sample with no
-    integer `value` (Polar emits null for a dropout) or an unparseable `dateTime` is skipped, never
-    guessed. Fractional seconds are stripped so two samples inside one second collapse to one (the
-    UNIQUE key is per second); the LAST one wins, as the later reading. The list is sorted by time."""
+def _sample_streams(data: dict) -> list[dict]:
+    """The stream dicts under `exercises[0].samples.samples[]` (`{type, intervalMillis, values}` each,
+    as the real export carries them); `[]` when the path is absent or shaped otherwise. Non-dict
+    entries are dropped here; the type / interval / values checks are the callers'."""
     exercises = data.get("exercises") or []
     if not exercises or not isinstance(exercises[0], dict):
         return []
-    groups = exercises[0].get("samples")
-    if not isinstance(groups, dict):
+    block = exercises[0].get("samples")
+    if not isinstance(block, dict):
         return []
-    items = groups.get("heartRate")
-    if not isinstance(items, list):
+    streams = block.get("samples")
+    if not isinstance(streams, list):
         return []
-    tz = _session_tz(data)
+    return [s for s in streams if isinstance(s, dict)]
+
+
+def _hr_samples(data: dict) -> list[tuple[datetime, int]]:
+    """The per-sample HR of one export session as `(aware time, bpm)`, from the `HEART_RATE` stream
+    of `exercises[0].samples.samples[]`: `values[i]` is the bpm at `startTime + i * intervalMillis`.
+    `[]` when the path is absent, the member has no `HEART_RATE` stream, or `startTime` is missing;
+    never an error. Every other stream type is ignored.
+
+    The anchor is the session's `startTime` through `_local_dt` with the session's offset, the very
+    call `_parse_session` stores the row's `start_time` with, so each sample is aware in the row's own
+    offset (one instant on Postgres; the row's naive clock on SQLite, FEEDBACK section 49). A `None`
+    entry (Polar's dropout) or a non-numeric one is skipped and its index still advances, so the
+    samples after it keep their place. Bpm is stored as received (`int()` of the float; 0 and other
+    implausible readings stay: plausibility is applied at zone time). A stream whose `intervalMillis`
+    is missing or not a positive number is skipped whole. Fractional seconds are stripped so two
+    samples inside one second collapse to one (the UNIQUE key is per second); the LAST one wins.
+    The list is sorted by time."""
+    streams = [s for s in _sample_streams(data) if s.get("type") == HR_STREAM_TYPE]
+    if not streams:
+        return []
+    start = _local_dt(data.get("startTime"), _session_tz(data))
+    if start is None:
+        return []
     out: dict[datetime, int] = {}
-    for item in items:
-        if not isinstance(item, dict):
+    for stream in streams:
+        interval, values = stream.get("intervalMillis"), stream.get("values")
+        if (isinstance(interval, bool) or not isinstance(interval, (int, float)) or interval <= 0
+                or not isinstance(values, list)):
             continue
-        raw_t, raw_v = item.get("dateTime"), item.get("value")
-        if isinstance(raw_v, bool) or not isinstance(raw_v, (int, float)) or not isinstance(raw_t, str):
-            continue
-        try:
-            t = datetime.fromisoformat(raw_t)
-        except ValueError:
-            continue
-        t = (t.replace(tzinfo=tz) if t.tzinfo is None else t.astimezone(tz)).replace(microsecond=0)
-        out[t] = int(raw_v)
+        for i, raw_v in enumerate(values):
+            if raw_v is None or isinstance(raw_v, bool) or not isinstance(raw_v, (int, float)):
+                continue
+            t = (start + timedelta(milliseconds=i * interval)).replace(microsecond=0)
+            out[t] = int(raw_v)
     return sorted(out.items())
+
+
+def session_sample_streams(data: dict) -> list[dict[str, Any]]:
+    """Per stream under `exercises[0].samples.samples[]`: its `type`, `intervalMillis`, the number of
+    entries and the number of null entries. Counts and the interval, never a value; the per-member
+    half of the `--keys` probe, so a member without a `HEART_RATE` stream, a new type or a changed
+    interval shows in one run."""
+    out = []
+    for s in _sample_streams(data):
+        values = s.get("values")
+        n = len(values) if isinstance(values, list) else None
+        nulls = sum(1 for v in values if v is None) if isinstance(values, list) else None
+        out.append({"type": s.get("type") if isinstance(s.get("type"), str) else f"<{type(s.get('type')).__name__}>",
+                    "intervalMillis": s.get("intervalMillis"), "count": n, "nulls": nulls})
+    return out
 
 
 def session_key_names(data: dict) -> dict[str, list[str]]:
@@ -470,16 +516,32 @@ def import_flow_export(
 
 def export_key_names(zip_source: ZipSource) -> dict[str, Any]:
     """`--keys`: the key names of the FIRST `training-session_*.json` member (`session_key_names`),
-    plus the member count; no database, no value printed. Empty when the ZIP has no session."""
+    the member count, and for EVERY member its sample streams (`session_sample_streams`: type,
+    interval, count, nulls); no database, no value printed. Empty when the ZIP has no session. A
+    member that does not parse as JSON is listed with its error class, not raised."""
     if isinstance(zip_source, (bytes, bytearray)):
         zip_source = io.BytesIO(zip_source)
     with zipfile.ZipFile(zip_source) as zf:
         names = sorted(n for n in zf.namelist() if n.startswith("training-session_") and n.endswith(".json"))
         if not names:
-            return {"found": 0, "member": None, "keys": {}}
-        with zf.open(names[0]) as f:
-            data = json.load(f)
-    return {"found": len(names), "member": names[0], "keys": session_key_names(data)}
+            return {"found": 0, "member": None, "keys": {}, "members": []}
+        keys: dict[str, list[str]] = {}
+        members: list[dict[str, Any]] = []
+        for i, name in enumerate(names):
+            try:
+                with zf.open(name) as f:
+                    data = json.load(f)
+            except Exception as exc:
+                members.append({"member": name, "error": type(exc).__name__, "streams": []})
+                continue
+            if i == 0:
+                keys = session_key_names(data)
+            members.append({"member": name, "streams": session_sample_streams(data)})
+    return {"found": len(names), "member": names[0], "keys": keys, "members": members}
+
+
+def _format_stream(s: dict[str, Any]) -> str:
+    return f"{s['type']} @{s['intervalMillis']}ms n={s['count']} null={s['nulls']}"
 
 
 def format_key_names(report: dict[str, Any]) -> str:
@@ -489,6 +551,14 @@ def format_key_names(report: dict[str, Any]) -> str:
     lines.append(f"first member: {report['member']}")
     for path, keys in report["keys"].items():
         lines.append(f"  {path}: {', '.join(keys) if keys else '(none)'}")
+    lines.append(f"sample streams per member (type @intervalMillis n=count null=nulls; a {HR_STREAM_TYPE} stream is what zones):")
+    for m in report.get("members", []):
+        if m.get("error"):
+            lines.append(f"  {m['member']}: (unreadable: {m['error']})")
+        elif not m["streams"]:
+            lines.append(f"  {m['member']}: (no sample stream)")
+        else:
+            lines.append(f"  {m['member']}: " + "; ".join(_format_stream(s) for s in m["streams"]))
     return "\n".join(lines)
 
 
