@@ -56,7 +56,7 @@ from context_builder import CONCURRENT_STRENGTH_PHRASE, _uncounted_phrase, plan_
 from current_state import current_state as _current_state   # plan, phase, phase_folders, week plan: one read
 from load_metrics import _local_day   # the single operator-local-day source
 from load_events_metabolic import FORMULA_VERSION_METABOLIC   # the metabolic events version, one definition
-from reads.zone_reads import format_zone_config, zone_config   # the zone-config read (design 0010, R7)
+from reads.zone_reads import format_zone_config, format_zone_coverage, zone_config, zone_coverage   # the zone-config and zone-coverage reads (design 0010, R7)
 
 _SERVER_ROOT = "https://health-app-backend-production-760e.up.railway.app"
 _MCP_URL = f"{_SERVER_ROOT}/mcp"
@@ -1136,6 +1136,27 @@ def get_hr_zone_config() -> str:
     db = SessionLocal()
     try:
         return format_zone_config(zone_config(db, user_id, today=_local_day()))
+    finally:
+        db.close()
+
+
+@mcp.tool()
+@_stamped
+def get_zone_coverage(days: int | None = None) -> str:
+    """How every aerobic session is zoned now, per source (health_connect, polar_v4,
+    polar_flow_export, any other present): the count zoned on the model (lthr: the cycling
+    class on % of LTHR; hrr: every other sport on % of heart-rate reserve), kept on Polar's
+    own zones (vendor, polar_vendor_fallback), withheld for a missing anchor (no_anchor) or
+    for sparse / absent same-writer samples (withheld); the Polar split (polar_rezoned from
+    the Polar Flow trace vs polar_vendor_fallback); the session date range; and up to 20 rows
+    not zoned on the model with their reason. `days` limits the window (None = all history).
+    Read-only and DERIVED: the counts come live from the same per-row zoning read the
+    sessions API uses; the refresh_load chain report is not stored, so nothing here is a
+    record of a run."""
+    user_id = _current_user_id()
+    db = SessionLocal()
+    try:
+        return format_zone_coverage(zone_coverage(db, user_id, days, today=_local_day()))
     finally:
         db.close()
 
