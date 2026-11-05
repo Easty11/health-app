@@ -318,6 +318,10 @@ class AerobicSessionOut(BaseModel):
     # back into Health Connect (>= HEVY_MIRROR_OVERLAP_FRACTION of its own duration inside a
     # Hevy bout, excluded or not). Always non-canonical; the stored row is kept as evidence.
     hevy_mirror: bool = False
+    # Derived at read time (reads.zone_reads.row_zoning, design 0010): what zoned this row — `class`
+    # (`lthr` cycling / `hrr` other), `basis` (`lthr` | `hrr` on the model, `vendor` for a Polar row
+    # keeping Polar's own zones, None when withheld), the anchors and bpm edges in force, a `reason`.
+    zoning: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -336,4 +340,5 @@ def get_aerobic_sessions(
     computed over the full window before `limit` so a bout's counterpart is
     never truncated out of the comparison.
     """
-    return arbitrated_sessions(current_user.id, db, since=since, limit=limit)
+    from reads.zone_reads import annotate_zoning
+    return annotate_zoning(db, current_user.id, arbitrated_sessions(current_user.id, db, since=since, limit=limit))
