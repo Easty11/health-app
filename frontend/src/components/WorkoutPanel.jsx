@@ -598,6 +598,14 @@ export default function WorkoutPanel({ onFeedback }) {
               <p className="text-xs text-indigo-700">
                 Found {polarImportResult.import.found} · Inserted {polarImportResult.import.inserted} · Skipped {polarImportResult.import.skipped} · Already present {polarImportResult.import.pre_existing} · Errors {polarImportResult.import.errors}
               </p>
+              {/* The export's per-second HR (#506): `found` is what the ZIP carried, `stored` what was new
+                  (0 stored on a re-upload of samples already present). Found 0 with members found means the
+                  export carries no HEART_RATE stream in the shape `import_polar` reads: `--keys` shows which. */}
+              {polarImportResult.import.hr_samples_found != null && (
+                <p className="text-xs text-indigo-700">
+                  HR samples: {polarImportResult.import.hr_samples_found} found · {polarImportResult.import.hr_samples_stored ?? 0} stored
+                </p>
+              )}
               {polarImportResult.notice && (
                 <p className="text-xs text-amber-700">{polarImportResult.notice}</p>
               )}

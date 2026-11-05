@@ -115,6 +115,40 @@ describe('A5 the session list', () => {
   })
 })
 
+// ── the Flow-export import card shows the HR-sample counts (#506) ────────────
+
+describe('the import card', () => {
+  async function importZip(importBody) {
+    api.post.mockImplementation((url) => {
+      if (url === '/integrations/polar/import-export') return Promise.resolve({ data: { import: importBody, notice: null } })
+      return Promise.resolve({ data: {} })
+    })
+    await renderPanel()
+    await openAerobicHistory()
+    const input = document.querySelector('input[type="file"]')
+    const file = new File(['zip'], 'polar-user-data-export.zip', { type: 'application/zip' })
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }) })
+    await waitFor(() => expect(screen.getByText('Import complete')).toBeTruthy())
+  }
+
+  test('renders hr_samples_found / hr_samples_stored when the response carries them', async () => {
+    await importZip({ found: 3, inserted: 0, skipped: 3, pre_existing: 3, errors: 0, hr_samples_found: 2379, hr_samples_stored: 2379 })
+    expect(screen.getByText('Found 3 · Inserted 0 · Skipped 3 · Already present 3 · Errors 0')).toBeTruthy()
+    expect(screen.getByText('HR samples: 2379 found · 2379 stored')).toBeTruthy()
+  })
+
+  test('a found of 0 still renders, as the loud signal it is', async () => {
+    await importZip({ found: 3, inserted: 0, skipped: 3, pre_existing: 3, errors: 0, hr_samples_found: 0, hr_samples_stored: 0 })
+    expect(screen.getByText('HR samples: 0 found · 0 stored')).toBeTruthy()
+  })
+
+  test('a response without the counts renders the row line alone', async () => {
+    await importZip({ found: 3, inserted: 3, skipped: 0, pre_existing: 0, errors: 0 })
+    expect(screen.getByText('Found 3 · Inserted 3 · Skipped 0 · Already present 0 · Errors 0')).toBeTruthy()
+    expect(screen.queryByText(/HR samples:/)).toBeNull()
+  })
+})
+
 // ── A3 — the triggers send a reference, not a rendering ─────────────────────
 
 describe('A3 session feedback (detail views, scope=session)', () => {

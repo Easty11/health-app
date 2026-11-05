@@ -330,11 +330,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **The Flow export's sample extractor reads the real export shape (the `HEART_RATE` stream under `exercises[0].samples.samples[]`), correcting #506's guessed path; `--keys` lists every member's streams and the import card shows the HR-sample counts.** Code - Canonical home: `closeout.md` (no new decision; #506 stands).
+
 - **The Polar Flow export's per-second HR is stored in `hr_samples` and Polar rows re-zone on the model from it (the densest Polar writer per bout, never mixed); the AccessLink fetch of GH#634 becomes optional.** Code - Canonical home: `DECISIONS_LOG.md` #506.
 
 - **Zone coverage is derived on read: the MCP `get_zone_coverage` tool reports per-source zoning (lthr / hrr / vendor / no_anchor / withheld, the Polar split) live from `row_zoning`; chain reports stay unpersisted.** Code - Canonical home: `DECISIONS_LOG.md` #505.
-
-- **R8 is ruled: a seeded anchor takes the earliest session date as its best current estimate (design 0010 `committed`), and a same-value anchor restatement under a new provenance is a real restatement, because provenance drives the retest flag.** Code - Canonical home: `DECISIONS_LOG.md` #503, #504.
 
 
 
