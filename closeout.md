@@ -1,117 +1,103 @@
-# Close-out — 6 Nov 2026: the Flow export's sample path corrected to the real shape (#506 follow-up; no new decision)
+# Close-out — 6 Nov 2026: Garmin activity metrics (display only) and the activity HR stream (#507, #508; PR GH#642 HELD)
 
 ## Real commits this session
 
-Session opened at health-app master `5db424d` (the merge of PR GH#640, the previous close-out), the anchor the brief
-named. Maxima at open: `DECISIONS_LOG` #506, no open `fork` issue. At close: still #506 (nothing minted: this session
-corrects #506's unverified input, it decides nothing new), still no open `fork` issue; no issue filed or touched (the
-issues-updated-since read returned nothing).
+Session opened at health-app master `10b59e5` (the merge of PR GH#641, the previous close-out), the anchor the brief
+named. Maxima at open: `DECISIONS_LOG` #506, no open `fork` issue. At close: #508 on this branch (#507 and #508
+resolved at master max #506; **re-resolve at the merge if master advances**), still no open `fork` issue; no issue
+filed or touched.
 
-One harness-assigned branch, `claude/exciting-gates-q84esh` (accepted per #387; the harness forbids pushing to any other
-name), one PR (ready-for-review, self-merged on green), three commits:
+One harness-assigned branch, `claude/quirky-faraday-wmnjvk` (accepted per #387), one PR, GH#642. It is
+ready-for-review and **not merged**, because it carries a schema migration (§ Merge disposition, one-way door). Six commits:
 
 | Commit | What |
 |---|---|
-| `8fb8604` fix(polar): read the Flow export's HEART_RATE sample stream, the real shape the --keys probe read | `import_polar._hr_samples` reads `exercises[0].samples.samples[]` → the `HEART_RATE` stream `{type, intervalMillis, values}`: `values[i]` at `startTime + i × intervalMillis` through `_local_dt`, the one conversion `_parse_session` stores the row's `start_time` with (the former nested `parse_dt` lifted to module level; no second clock); null entries skipped with the index kept; bpm as received; other stream types ignored; no `HEART_RATE` stream, or a missing / non-positive `intervalMillis`, → 0 samples, no error; the guessed `samples.heartRate[].{dateTime, value}` path removed, no fallback. `--keys` adds, for every member, each stream's type, `intervalMillis`, value count and null count (no value; an unreadable member lists its error class). `tests/test_polar_export_samples.py` rebuilt on the real shape (39 tests; the operator's probe facts are the path fixture). |
-| `cce44ee` feat(ui): the Flow-export import card shows hr_samples_found / hr_samples_stored | `WorkoutPanel` renders "HR samples: N found · M stored" whenever the response carries `hr_samples_found` (0 renders); the route already returned both (verified at `routers/polar.py`, no route change). Three vitest cases in `WorkoutPanel.test.jsx` drive the hidden file input through the mocked route. |
-| the `gov(export-hr-path)` commit (this file rides it; it cannot name its own hash) | The ROADMAP zone-model row (the export-ingest sentence and the OWED-operator clause rewritten to the real path and the card read); design 0010 row 6's evidence cell (the path clause); the `BRANCHES.md` row; the `CLAUDE.md` Recent-landings pointer (the #503/#504 pointer dropped under the cap of 3); this file. `DECISIONS_LOG` untouched: #506's text stands, append-only. |
+| `0ad9c5b` migration(garmin-metrics) | `a9d3f5b7c2e4` adds `garmin_activity_metrics`: one row per (user, activity), every metric nullable and stored as received, the raw `summaryDTO`, no session link (R1), plus `hr_stream_fetched_at` / `hr_stream_samples` (an addition to the brief's column list, so each stream is fetched once). The model, SCHEMA §052 and the `hr_samples` writers note are in the same commit, along with the schema parity test. The anchors schema test no longer pins `e7b2a4c9d1f3` as head. |
+| `4343f46` feat(garmin) | `garmin_activity_metrics.py`, the selfeval upsert from the same detail, the stream pass in the selfeval lane, `sample_writers_for`, the overlap placement read, the sessions API field, the MCP suffix, the guard test, the probe hint. |
+| `554abce` feat(garmin) backfill | `scripts/garmin_activity_backfill.py` and its tests. |
+| `12cb835` feat(ui) | The "Garmin" tiles on the session detail. |
+| `a1fd11d` docs | Design 0010 row 7, plus the details endpoint row in the Personal API plan. |
+| the `gov(garmin-metrics)` commit (this file rides it) | `DECISIONS_LOG` #507 and #508, the ROADMAP zone-model row (Part B), the `BRANCHES.md` row, the `CLAUDE.md` Recent-landings pointer (the #505 pointer dropped under the cap of 3), and this file. |
 
-**Verified, reported before any code (Step 1).** (1) #506's extractor read `exercises[0].samples.heartRate[]` with
-`{dateTime, value}` items (`import_polar._hr_samples`, the `groups.get("heartRate")` branch): CONFIRMED, so on the real
-shape (`samples.samples[]`, a list of streams) it found nothing, exactly as the operator's probe implied. (2) #506's
-time conversion: `_hr_samples` did `t.replace(tzinfo=_session_tz(data))` for a naive `dateTime`, and `_parse_session`'s
-nested `parse_dt` did the same for `startTime` (`dt.replace(tzinfo=tz) if dt.tzinfo is None else dt`): two copies of
-one rule. The fix lifts `parse_dt` to the module-level `_local_dt(s, tz)`, `_parse_session` calls it unchanged, and
-`_hr_samples` anchors every sample on `_local_dt(startTime, _session_tz(data))`, so the row and its samples share one
-call, not one rule in two places; the test pins `got[0][0] == _parse_session(body)["start_time"]` with the same
-`tzinfo`. (3) The upload route already returned `hr_samples_found` / `hr_samples_stored` (`routers/polar.py:264-265`):
-CONFIRMED, so Step 4 is the card alone. (4) Beyond the brief: the operator's probe gave `values` as floats (`70.0`);
-`int()` truncates (70.9 → 70), pinned by a test; and `intervalMillis` is read as given (the probe's 1000), so a
-member at another interval spaces its samples by it (a 2000 ms fixture is the "sparser export" case the densest-writer
-rule already tested).
+**Step 1 VERIFY, before code. No mismatch, so no halt.**
 
-**Tests.** `tests/test_polar_export_samples.py` 39 passed (with `test_polar_import_export.py`, `test_hc_zone_enrich.py`,
-`test_zone_coverage.py`: 100); the full backend suite 4566 passed, 4 skipped, 1 xfailed, 1 failed = the known
-`tests/test_current_state.py` shallow-clone `git show` (object `3360ed5` absent locally, `git rev-parse
---is-shallow-repository` true; CI checks out full depth); frontend 581 passed (65 files, 3 new cases);
-`scripts/check_governance_placeholders.py` exit 0. No prod write by Code, no recompute, no migration.
+1. **The selfeval read.** `garmin_selfeval.sync_user` makes one list GET, then one detail GET per new activity and per unrated activity due a re-check. It keeps `directWorkoutRpe` and `directWorkoutFeel` only. CONFIRMED.
+   - The read window is 14 days back (`LIST_WINDOW_DAYS`), or from one day before the last captured start if that is later. It reads one page of 50, oldest first.
+   - Unrated activities are re-checked for 7 days, at most once per 20 h.
+   - Pacing is the `PersonalClient`'s 2 s minimum gap on the real host (`PACE_S`). The lane runs once a night in the 02:00 sweep.
+2. **#506's densest-writer selection.** It is `hc_zone_enrich._row_samples`, fed by `sample_writers_for(row)`. It takes `max(streams, key=len)` over any tuple of writers, and a tie keeps tuple order. It already generalises to a writer list per row, and #508 reuses it unchanged.
+3. **maxChartSize.** This was NOT measurable here, because the probe printed key names only and no fixture carries real counts.
+   - `garminconnect` 0.3.11's `get_activity_details` sends `maxChartSize=2000` / `maxPolylineSize=4000` by default, so the endpoint does thin. The probe's details call sent no parameter.
+   - The code therefore asks `maxChartSize=100000` and `maxPolylineSize=0`, and retries once without them on HTTP 400. It reports thinning on every fetch, with the effective interval.
+   - The backfill's `thinned` and `median_interval_s` counts settle the question on the operator's run.
+   - **The brief's comparison pair is likely the wrong pair (Likely, not Certain).** In Garmin's details payload, `measurementCount` is the number of metric descriptors. The rows returned are `metricsCount`, and the full-resolution total is `totalMetricsCount`. The code compares `totalMetricsCount` with the rows returned.
 
-**Merge disposition.** Two-way door, no migration: the PR self-merges on green under § Merge disposition. The merge SHA
-and the `deploy-check` run (#491: SUCCESS owed on BOTH services, `backend/` and `frontend/` both changed) are reported in
-the session's final message, not here (this file is written before the merge).
+**Step 4 VERIFY.**
+
+- No other row type gains cross-writer reads. Tests cover Samsung HC, Polar Flow HC, a NULL-package HC row, `polar_v4` and `polar_flow_export`.
+- `garmin` / `personal_api` is never in any row's writers.
+- INV-7 is unchanged: a Garmin HC row with only wellness samples is withheld with NULL zones.
+- A mutation that points the writer at the wellness lane fails 3 tests.
+- One known gap is documented in the code: `over_ceiling_prompts` reads the HC writer only, so an over-ceiling sample held only in the activity stream is counted by the chain report but not prompted.
+
+**Step 7 VERIFY.** The probe's token is the DI token. `wake_day_capture` runs `_di_spo2_lane(keepalive=True)` when the Recovery page opens (Refresh forces it) or the morning check-in opens, and that refreshes and saves the DI token. The hint now says so. Other scripts still carry the old "Garmin card" hint and were left alone because they are out of scope: `garmin_spo2_backfill.py` and `garmin_identity.py`.
+
+**Tests.**
+
+| Suite | Result |
+|---|---|
+| Backend | 4607 passed, 4 skipped, 1 xfailed. 1 failed: the known `test_current_state.py` shallow-clone `git show`, local only. |
+| Frontend | 583 passed, 65 files |
+| `scripts/check_governance_placeholders.py` | exit 0 |
+
+No prod write by Code, no backfill run, no token refresh.
 
 ## Pending-queue reconciliation
 
-No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief `Export HR Path Fix -
-Echo Bike Zones Review`; each step against where it landed:
+No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief `Garmin Activity
+Metrics - Echo Bike Zones Review`. Each step against where it landed:
 
-- **ANCHOR** — master HEAD `5db424d` as stated, `HEAD` contains it; the branch is the harness-assigned
-  `claude/exciting-gates-q84esh`, confirmed before the first edit.
-- **Step 1 VERIFY** — DONE, reported above before code; no mismatch, so no halt.
-- **Step 2 extractor** — DONE (`8fb8604`), to the letter: stream type `HEART_RATE`, `startTime` (with
-  `timezoneOffsetMinutes`) + i × `intervalMillis`, None skipped with the index advancing, bpm as received, no stream → 0
-  samples and no error, other types ignored, the guessed path removed with no dual-path fallback.
-- **Step 3 probe** — DONE (`8fb8604`): per member, the stream types, `intervalMillis` and counts, no values.
-- **Step 4 card** — DONE (`cce44ee`); the route verified first (it already returned both keys; nothing added to it).
-- **Step 5 tests** — DONE (`8fb8604`, `cce44ee`): the real-shape fixture at 1000 ms with tz 600 → N samples at the
-  right instants (the probe's own start, `2026-03-01T09:38:46` +10:00 = `2026-02-28T23:38:46Z`); None skipped with the
-  index preserved; no `HEART_RATE` stream → 0, no error; a second stream type ignored; re-import idempotent; the #506
-  guessed-path tests replaced.
-- **Step 6** — the commits concern-split (backend fix + tests; card; governance); the PR ready-for-review, the merge,
-  the merge commit and the `deploy-check` id and status follow in-turn in the final message.
-- **LOG** — none, as the brief states; the correction is recorded here and in the ROADMAP row (and the BRANCHES row,
-  design 0010 row 6's evidence cell); #506's text untouched.
-- **Provisional:** nothing. Everything decided is committed; the merge and the deploy check follow in-turn.
+- **ANCHOR**: DONE. The repo, HEAD containing `10b59e5`, and the branch `claude/quirky-faraday-wmnjvk` were confirmed before the first edit. The fresh-clone `core.hooksPath` and `land` alias were set.
+- **Step 1**: DONE, as above.
+- **Step 2 migration**: DONE `0ad9c5b`, HELD.
+- **Steps 3 and 4**: DONE `4343f46`.
+- **Step 5 backfill**: DONE `554abce`.
+- **Step 6 display and guard**: DONE `4343f46` and `12cb835`.
+- **Step 7 probe message**: DONE `4343f46`.
+- **Step 8 tests**: DONE across those commits.
+- **Step 9**: DONE. The commits are concern-split, and the PR is ready-for-review and not merged.
+- **LOG**: #507 and #508 in the gov commit, worded from the brief. #508 also records the resolution handling.
+- **Provisional**: the decision numbers only. Re-read master's max before the merge.
 
 ## Cold-resume handoff
 
-**Current sprint (ROADMAP NOW).** Zone model: DONE and seeded; R8 ruled (#503); the restatement guard fixed (#504);
-coverage readable from chat (#505); the export's samples stored and zoned (#506), its extractor now on the real export
-shape (this session). OWED (operator, after this deploy): re-upload the Flow export and read the card's HR-samples
-line (`hr_samples_stored` > 0 expected), open the Training page (the chain re-zones), ask chat to call
-`get_zone_coverage` (the `polar_flow_export` `vendor` count should fall from 50); the B1 Garmin probe (`--keys`) output;
-the standing LTHR restatement to `device_estimated` and an Echo bike Z2 ride read on its card. Ledger UX follow-ups
-(GH#622 to GH#629): PR-A and the ruling landed 5 Nov; the rest UNSTARTED. Coach ledger writes (GH#612 to GH#617):
-UNSTARTED. Injury lifecycle in-app (design 0009): branches landed; its remaining rows unchanged. Wake-day capture:
-DONE, three-morning gate OWED. The other NOW rows are OWED to the operator or Code as their cells say and did not move.
+**Current sprint (ROADMAP NOW).**
 
-**v1 triage of NOW.** Zone model — See (a Z2 ride reads and deposits as Z2) and Know (the conditioning quota counts
-load the device agrees with); this session makes the export rows' re-zoning actually possible (the #506 path found
-nothing on the real file), which is the See test's data. Ledger UX, coach ledger writes, injury lifecycle — Know and
-Walk in. Wake-day capture and lane visibility — Loop. Missed-PM catch-up, data freshness, plan/schedule tools — Loop /
-See, DONE and riding for their owed checks. RPE fallback (Q231) — See, OWED (Code once the gate opens). Source
-hierarchy (#365) and the Polar relabel limbs — OWED (Luke), serving See / Know; neither moved this session and neither
-is a demotion candidate: each waits on a named operator act.
+- **Zone model.** DONE and seeded. #503 to #506 have landed and the export path is fixed. Part B (this PR) is BUILT and HELD.
+- **OWED (operator), from the previous session.** Re-upload the Flow export and read its HR-samples line. Open the Training page. Ask chat for `get_zone_coverage`. Restate LTHR 158 as `device_estimated`. Report back a Z2 Echo-bike ride read on its card.
+- **OWED (operator), this PR.** Release GH#642. Then run the backfill dry run and live run, and paste the counts.
+- **Unchanged.** Ledger UX follow-ups (GH#622 to GH#629), coach ledger writes (GH#612 to GH#617), injury lifecycle (design 0009) and the wake-day three-morning gate.
 
 **Open `fork` issues.** None.
 
-**Design docs not in a terminal state.** 0001, 0002, 0004, 0005 (Q213 still open; the Flow-export key read is served
-by `import_polar.py --keys`, now per member), 0006, 0007, 0008, 0009. 0010 is `committed`. 0000 is the template.
+**Design docs not in a terminal state.** 0001, 0002, 0004, 0005, 0006, 0007, 0008 and 0009. 0010 is `committed` and gained row 7, resolved. 0000 is the template.
 
-**Branch gate.** This session's one branch, `claude/exciting-gates-q84esh`, is rowed DONE in `BRANCHES.md` against this
-PR, self-merged in-turn, deleted at merge. `origin` also holds `chat/render-status-transport` (1 commit ahead of master
-by `git cherry`) and `claude/cbti-verdict-table` (11 ahead), neither touched this session and neither rowed in
-`BRANCHES.md`; both were reported in the previous close-out and belong to other sessions; reported again, not acted on.
-No `BRANCHES.md` row carries OWED or BLOCKED in its Status column (the Q138 sweep is empty; the grep hits on those
-words are prose inside DONE rows).
+**Branch gate.**
 
-**Not touched this session (named so it is not read as finished).** Part B of the `Export HR & Garmin Metrics` brief in
-its entirety (no `garmin_activity_metrics` table, no metrics upsert, no dense Garmin HR stream, no tiles), still gated
-on the operator's B1 probe output. The export re-upload itself: the extractor is fixed on the operator's probe of ONE
-member; other members may lack a `HEART_RATE` stream or carry other types, which the per-member `--keys` line now shows
-but this session could not read. The ledger UX defects GH#623 to GH#629 and the coach ledger writes GH#612 to GH#617
-stood still; the RPE fallback (Q231), the source hierarchy ruling (#365), the Polar relabel limbs, the appointment
-reconcile leg, the three-morning wake-day gate, the single-row HC bout deposit read (#384 item 4) and GH#635 (Garmin
-time-in-zone cross-check) are unchanged, all gated on the operator acts or capacity their rows name. Five consecutive
-sessions have now gone to the zone model, its governance, its instrumentation and its Polar input; the thing being
-instrumented — a Z2 ride on the Echo bike reading as Z2 on its card — is still an operator read that has not been
-reported back. No companion-app (`health-connect-app`) work; no `FEEDBACK.md` change.
+- `claude/quirky-faraday-wmnjvk` is rowed BLOCKED in `BRANCHES.md`. The blocker is the operator's release of the migration.
+- `chat/render-status-transport` and `claude/cbti-verdict-table` were not touched. They belong to other sessions, as reported before.
 
-**The single clearest next action (operator).** Once this PR's deploy check is green on both services: re-upload the
-Polar Flow export through the aerobic history's `Import export ZIP` button and read the card's "HR samples: N found ·
-M stored" line (M > 0 on this first re-upload). If N is 0 with members found, the real file has drifted from the probed
-member: run `python import_polar.py --zip <export.zip> --keys` locally and paste the per-member streams lines. Then open
-the Training page (the chain re-zones), ask chat to call `get_zone_coverage` (the `polar_flow_export` `vendor` count
-should fall from 50), and in the same sitting run the Garmin probe (`railway ssh --service health-app-backend`,
-`cd /app`, `/opt/venv/bin/python -m scripts.garmin_selfeval_probe --user-id 1 --keys`) and paste its output: that
-opens Part B.
+**Not touched this session (named so it is not read as finished).**
+
+- The backfill itself, and therefore the resolution finding. These are operator acts after the release.
+- GH#635 (Garmin time-in-zone cross-check), GH#634 (AccessLink samples), Q231, #365 and the Polar relabel limbs.
+- No companion-app work and no `FEEDBACK.md` change.
+- Six consecutive sessions have now gone to the zone model and its inputs. The Z2 ride read on its card is still not reported back.
+
+**The single clearest next action (operator).** Release GH#642. Once `deploy-check` is green on both services, run these in `railway ssh --service health-app-backend` from `/app`:
+
+1. `/opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --limit 5`, a quick dry run.
+2. The same command without `--limit`.
+3. The same command with `--confirm`.
+
+Paste the count lines. Then open the Training page, and ask chat to read `get_recent_sessions` and `get_zone_coverage`.
