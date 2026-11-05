@@ -1,6 +1,6 @@
 # 0005 — HR input layer
 **State:** ideation
-**Owner:** Luke   **Opened:** 2026-10-31   **Last moved:** 2026-10-31
+**Owner:** Luke   **Opened:** 2026-10-31   **Last moved:** 2026-11-05 (Q198 and Q216 moved to 0010; Q213 stays)
 
 ## Context
 
@@ -20,9 +20,9 @@ none recorded
 
 | # | Question | Proposed answer | Evidence that settles it | Door | Status |
 |---|----------|-----------------|--------------------------|------|--------|
-| Q198 | Source-neutral re-zoning from raw HR (Polar and any other pathway the inventory shows) (re-zoning from raw HR) | none yet | none recorded | unclassified | open |
+| Q198 | Source-neutral re-zoning from raw HR (Polar and any other pathway the inventory shows) (re-zoning from raw HR) | Design 0010 §4: Polar rows re-zone from the `fi.polar.polarflow` Health Connect samples of the same bout where they cover it, else keep vendor zones (flagged); native Polar sample ingest is a `build` issue | 0010 row 1 and row 6 | two-way | moved to 0010 (rows 1, 6) |
 | Q213 | The HR input layer, per second: Edwards retained, source precedence, bounded gap interpolation, and the sRPE floor (per-second layer, precedence, interpolation) | none yet | none recorded | unclassified | open |
-| Q216 | Should HC zoning move to heart-rate reserve (Karvonen: resting HR to HRmax), so zones adapt forward with fitness through resting HR? (Karvonen/HRR) | none yet | none recorded | unclassified | open |
+| Q216 | Should HC zoning move to heart-rate reserve (Karvonen: resting HR to HRmax), so zones adapt forward with fitness through resting HR? (Karvonen/HRR) | Yes for every sport outside the cycling class; the cycling class zones on %LTHR (Friel). Design 0010 §2–§3, operator ruling 2026-11-05 | 0010 (`DECISIONS_LOG` entry at its merge) | one-way (load meaning, migration) | moved to 0010 |
 
 ## Decisions landed
 
