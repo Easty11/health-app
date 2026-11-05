@@ -272,3 +272,87 @@ def test_the_endpoint_paths_still_match_the_pinned_library():
     g = Garmin()
     assert sp.ACTIVITY_LIST_PATH == g.garmin_connect_activities
     assert sp.ACTIVITY_PATH == g.garmin_connect_activity
+
+
+# -- --keys: the activity-metrics probe prints key NAMES only (B1 of the Garmin metrics brief) ----
+
+DETAILS = {
+    "activityId": 111222333,
+    "measurementCount": 4,
+    "metricsCount": 2,
+    "metricDescriptors": [{"metricsIndex": 0, "key": "directHeartRate", "unit": {"key": "bpm"}},
+                          {"metricsIndex": 1, "key": "directTimestamp", "unit": {"key": "gmt"}}],
+    "activityDetailMetrics": [{"metrics": [123.0, 1700000000000]}, {"metrics": [124.0, 1700000001000]}],
+    "secretTop": "SECRET-DETAILS-VALUE",
+}
+
+
+class KeysSource(FakeSource):
+    """The list, the detail and the details stream, by path; records every request."""
+
+    def __init__(self, details=None, details_exc=None):
+        super().__init__()
+        self._details = DETAILS if details is None else details
+        self._details_exc = details_exc
+
+    def get(self, path, params=None):
+        if path.endswith("/details"):
+            self.calls.append((path, params))
+            if self._details_exc is not None:
+                raise self._details_exc
+            return self._details
+        return super().get(path, params)
+
+
+def test_keys_report_names_the_summary_dto_and_details_keys_and_no_value():
+    src = KeysSource()
+    text_out = sp.format_keys_report(sp.probe_keys(src, activity_id=None), "sqlite file=x")
+    assert [p for p, _ in src.calls] == [sp.ACTIVITY_LIST_PATH, f"{sp.ACTIVITY_PATH}/111222333",
+                                         f"{sp.ACTIVITY_PATH}/111222333/details"]
+    assert src.calls[0][1] == {"start": "0", "limit": "1"}
+    assert "Activity 111222333  2026-10-03  running  (key names only, no values)" in text_out
+    assert "detail top-level keys (3): activityId, splits, summaryDTO" in text_out
+    assert "detail summaryDTO keys (4): averageHR, directWorkoutFeel, directWorkoutRpe, secretField" in text_out
+    assert ("details top-level keys (6): activityDetailMetrics, activityId, measurementCount, metricDescriptors, "
+            "metricsCount, secretTop") in text_out
+    assert "details metricDescriptors[].key, the metric NAMES (2): directHeartRate, directTimestamp" in text_out
+    assert "details activityDetailMetrics[0] keys: metrics" in text_out
+    assert "details metricDescriptors[0] keys: key, metricsIndex, unit" in text_out
+    for leaked in ("SECRET", "123456", "987654", "70", "50", "1700000000000", "123.0", "bpm", "07:41"):
+        assert leaked not in text_out, leaked
+    assert text_out.isascii() and "three GET requests at most" in text_out
+
+
+def test_keys_report_takes_a_given_activity_id_without_listing():
+    src = KeysSource()
+    result = sp.probe_keys(src, activity_id="999")
+    assert [p for p, _ in src.calls] == [f"{sp.ACTIVITY_PATH}/999", f"{sp.ACTIVITY_PATH}/999/details"]
+    assert result["id"] == "999" and result["date"] == "?" and result["summary_dto_present"]
+
+
+def test_keys_report_survives_a_failed_details_fetch_with_the_error_class_only():
+    src = KeysSource(details_exc=ConnectionError("details with tok-recognisable-secret"))
+    text_out = sp.format_keys_report(sp.probe_keys(src, activity_id=None), "t")
+    assert "details endpoint: fetch failed: ConnectionError" in text_out
+    assert "detail summaryDTO keys (4)" in text_out and "tok-recognisable" not in text_out
+
+
+def test_keys_report_says_when_the_summary_dto_is_absent_and_when_nothing_is_listed():
+    src = KeysSource()
+    src._detail = {"activityId": 1}
+    assert "summaryDTO: ABSENT" in sp.format_keys_report(sp.probe_keys(src, activity_id=None), "t")
+    src = KeysSource()
+    src._listing = []
+    assert "nothing fetched beyond the list" in sp.format_keys_report(sp.probe_keys(src, activity_id=None), "t")
+    assert [p for p, _ in src.calls] == [sp.ACTIVITY_LIST_PATH]
+
+
+def test_keys_mode_runs_through_main_read_only_and_prints_no_token(db_session, monkeypatch):
+    _add_user_garmin(db_session)
+    stmts: list[str] = []
+    event.listen(db_session.get_bind(), "before_cursor_execute",
+                 lambda c, cur, st, p, ctx, m: stmts.append(st.strip().upper()))
+    rc, out = _run(db_session, monkeypatch, ["--user-id", "1", "--keys"], lambda b: KeysSource())
+    assert rc == 0 and "detail summaryDTO keys (4)" in out and "directHeartRate" in out
+    assert stmts and all(s.startswith("SELECT") for s in stmts), stmts
+    assert "tok-recognisable-secret" not in out and "SECRET" not in out

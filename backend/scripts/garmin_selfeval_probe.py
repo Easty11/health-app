@@ -2,6 +2,16 @@
 
     /opt/venv/bin/python -m scripts.garmin_selfeval_probe --user-id 1
     /opt/venv/bin/python -m scripts.garmin_selfeval_probe --user-id 1 --limit 20 --activity-id 123456789
+    /opt/venv/bin/python -m scripts.garmin_selfeval_probe --user-id 1 --keys
+
+`--keys` (the activity-metrics probe, `Export HR & Garmin Metrics` brief B1) prints KEY NAMES ONLY:
+the `summaryDTO` keys of the latest (or `--activity-id`) activity's detail record, the detail's own
+top-level keys, and, from the details endpoint (`/activity-service/activity/{id}/details`, the HR
+stream's home), its top-level keys, the `metricDescriptors[].key` metric names (names of metrics, not
+readings) and the keys of the first item of each top-level list. No value of any key is printed; a
+details fetch that fails prints its error CLASS and the rest of the report stands. Three GETs.
+The field names behind calories, Training Effect, Garmin load and respiration are NOT assumed: this
+output is what settles them before any table is designed.
 
 Built for Q209 (per-session sRPE capture at session save). `garminconnect` 0.3.11 has no named
 self-evaluation field, but it returns Garmin's JSON unmodelled (`get_activity` and `get_activities`
@@ -122,6 +132,79 @@ def probe(source: ProbeSource, *, limit: int, activity_id: str | None) -> dict[s
     return {"listed": rows, "detail": detail}
 
 
+def _key_names(obj: Any) -> list[str]:
+    return sorted(str(k) for k in obj) if isinstance(obj, dict) else []
+
+
+def _list_item_keys(obj: Any) -> dict[str, list[str]]:
+    """`{name[0]: keys}` for every top-level list of dicts in a payload (the first item's keys)."""
+    out: dict[str, list[str]] = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, list) and v and isinstance(v[0], dict):
+                out[f"{k}[0]"] = _key_names(v[0])
+    return out
+
+
+def probe_keys(source: ProbeSource, *, activity_id: str | None) -> dict[str, Any]:
+    """Three GETs: the latest activity (or `--activity-id`), its detail record, its details stream.
+    Returns key NAMES only; a failed details fetch is reported by error class, never raised."""
+    listed = source.get(ACTIVITY_LIST_PATH, {"start": "0", "limit": "1"}) if activity_id is None else []
+    items = listed if isinstance(listed, list) else []
+    target = activity_id or (str(items[0].get("activityId")) if items and isinstance(items[0], dict)
+                             and items[0].get("activityId") is not None else None)
+    if target is None:
+        return {"id": None}
+    meta = _ident(items[0]) if items else {"id": target, "date": "?", "type": "?"}
+    detail = source.get(f"{ACTIVITY_PATH}/{target}")
+    out: dict[str, Any] = {
+        "id": target, "date": meta["date"], "type": meta["type"],
+        "detail_keys": _key_names(detail),
+        "summary_dto_keys": _key_names(detail.get("summaryDTO")) if isinstance(detail, dict) else [],
+        "summary_dto_present": isinstance(detail, dict) and isinstance(detail.get("summaryDTO"), dict),
+        "details_error": None, "details_keys": [], "details_metric_names": [], "details_list_item_keys": {},
+    }
+    try:
+        details = source.get(f"{ACTIVITY_PATH}/{target}/details")
+    except Exception as exc:  # noqa: BLE001 -- the error CLASS is the whole report for this GET
+        out["details_error"] = type(exc).__name__
+        return out
+    out["details_keys"] = _key_names(details)
+    descriptors = details.get("metricDescriptors") if isinstance(details, dict) else None
+    out["details_metric_names"] = sorted(str(d.get("key")) for d in descriptors
+                                         if isinstance(d, dict) and d.get("key") is not None) \
+        if isinstance(descriptors, list) else []
+    out["details_list_item_keys"] = _list_item_keys(details)
+    return out
+
+
+def format_keys_report(result: dict[str, Any], target: str) -> str:
+    out: list[str] = [f"Target database: {target}", ""]
+    if result["id"] is None:
+        out.append("No activity listed and no --activity-id given; nothing fetched beyond the list.")
+        return "\n".join(out)
+    out.append(f"Activity {result['id']}  {result['date']}  {result['type']}  (key names only, no values)")
+    out.append(f"  detail top-level keys ({len(result['detail_keys'])}): {', '.join(result['detail_keys']) or '(none)'}")
+    if result["summary_dto_present"]:
+        out.append(f"  detail summaryDTO keys ({len(result['summary_dto_keys'])}): "
+                   f"{', '.join(result['summary_dto_keys']) or '(none)'}")
+    else:
+        out.append("  detail summaryDTO: ABSENT or not an object (shape change; see garmin_selfeval)")
+    if result["details_error"]:
+        out.append(f"  details endpoint: fetch failed: {result['details_error']}")
+    else:
+        out.append(f"  details top-level keys ({len(result['details_keys'])}): "
+                   f"{', '.join(result['details_keys']) or '(none)'}")
+        out.append(f"  details metricDescriptors[].key, the metric NAMES ({len(result['details_metric_names'])}): "
+                   f"{', '.join(result['details_metric_names']) or '(none)'}")
+        for name, keys in sorted(result["details_list_item_keys"].items()):
+            out.append(f"  details {name} keys: {', '.join(keys) or '(none)'}")
+    out.append("")
+    out.append("READ-ONLY: nothing was written, no token was refreshed, no Hevy call was made;"
+               " three GET requests at most (the activity list, one activity detail, its details stream).")
+    return "\n".join(out)
+
+
 def format_report(result: dict[str, Any], target: str) -> str:
     out: list[str] = [f"Target database: {target}", ""]
     rows = result["listed"]
@@ -167,6 +250,8 @@ def main(argv: list[str] | None = None, *, factory=ProbeSource) -> int:
     p.add_argument("--user-id", type=int, required=True)
     p.add_argument("--limit", type=int, default=10, help=f"activities to list (1-{MAX_LIMIT}; default 10)")
     p.add_argument("--activity-id", default=None, help="fetch this activity's detail instead of the most recent")
+    p.add_argument("--keys", action="store_true",
+                   help="print the KEY NAMES of the latest activity's summaryDTO and details stream (no values)")
     args = p.parse_args(argv)
     if not 1 <= args.limit <= MAX_LIMIT:
         p.error(f"--limit must be 1-{MAX_LIMIT}")
@@ -185,6 +270,9 @@ def main(argv: list[str] | None = None, *, factory=ProbeSource) -> int:
         print(f"Target database: {target}\n\nuser {args.user_id} has no Garmin connection; nothing was fetched.")
         return 1
     try:
+        if args.keys:
+            print(_ascii(format_keys_report(probe_keys(factory(blob), activity_id=args.activity_id), target)))
+            return 0
         result = probe(factory(blob), limit=args.limit, activity_id=args.activity_id)
     except RefreshWouldBeNeeded:
         print("Garmin token needs a refresh, and a fetch would refresh it (and may rotate the stored token)."

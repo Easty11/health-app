@@ -255,7 +255,8 @@ def test_the_formatter_names_the_window_each_source_the_polar_split_and_where_th
     assert "3 rows, 2026-10-29 to 2026-10-31: lthr 1 · hrr 0 · vendor (polar_vendor_fallback) 1 · no_anchor 0 · withheld 1" in text
     assert "  health_connect (2): lthr 1 · hrr 0 · vendor (polar_vendor_fallback) 0 · no_anchor 0 · withheld 1" in text
     assert "  polar_v4 (1): lthr 0 · hrr 0 · vendor (polar_vendor_fallback) 1 · no_anchor 0 · withheld 0" in text
-    assert "  Polar rows 1: polar_rezoned 0 (zoned on the model from the fi.polar.polarflow trace) · polar_vendor_fallback 1" in text
+    assert ("  Polar rows 1: polar_rezoned 0 (zoned on the model from the Polar trace: the fi.polar.polarflow "
+            "Health Connect copy or the Flow export's samples) · polar_vendor_fallback 1") in text
     assert f"    row {fb.id} 2026-10-31 Indoor cycling [polar_v4]: polar_vendor_fallback (basis vendor)" in text
     assert lines[-1] == ("  Counts are derived live from reads.zone_reads.row_zoning, the sessions API's zoning path; "
                          "the refresh_load chain report is not stored, so no run-to-run delta is available here.")

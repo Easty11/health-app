@@ -150,6 +150,12 @@ sport map, each needed anchor via `anchor_in_force` on the row's `session_date`;
   (`also_recorded_by` lists `fi.polar.polarflow` on every Polar bout since 30 Jun 2026); rows before that have no
   copy and stay vendor. Native Polar sample ingest (AccessLink `samples` feature, untested) is a separate `build`
   issue (GH#634, filed with this doc) so the remaining Polar rows reach the model.
+  **Since #506:** the Flow export's own samples are stored too (`import_polar`, `hr_samples` with
+  `source = source_package = 'polar_flow_export'`, written for inserted and already-present sessions alike, so a
+  re-upload fills history), and `POLAR_SAMPLE_WRITERS` is a tuple of `(source, source_package)` writers holding both
+  the HC copy and the export. When more than one permitted writer covers a bout the densest stream is zoned from
+  alone (`_row_samples`); streams are never mixed. The AccessLink fetch (GH#634) is now optional: only a `polar_v4`
+  row with neither an export copy nor an HC copy still needs it.
 - **Per-row basis on read.** Nothing is stored: `reads.zone_reads.row_zoning(row, anchors)` derives
   `{basis: lthr|hrr|vendor, class, anchors: {...}, spec}` from `(source, sport_name, session_date, samples present)`,
   and is attached to every session the sessions API returns (`AerobicSessionOut.zoning`) and to the load event's
@@ -235,10 +241,11 @@ default) and the provenance line (vitest).
 | 3 | Do rowing / elliptical / cross-trainer ergs join the LTHR class? | No: the LTHR anchor is a cycling threshold; they zone on %HRR. | the operator's Garmin profile (LTHR on cycling only); `sport_classes.LTHR_SPORTS` | two-way (reverse-by: add the name) | resolved in-PR (ruling, #502) |
 | 4 | R8: seeded anchors take `effective_from` = earliest session date? | Yes, shipped as the card's default date, editable. | the operator's OK | one-way (shapes stored rows' meaning) | resolved: the operator ruled YES, 2026-11-05 (no earlier threshold data); #503 |
 | 5 | Does the card become a writer of `user_hrmax`? | No: the script stays the one writer; the card shows HRmax and names the script. | `tests/test_hr_zones_schema.py::test_only_the_operator_script_writes_user_hrmax` | two-way | resolved in-PR (ruling, #502) |
-| 6 | Native Polar per-second sample ingest (AccessLink `samples`)? | Build issue; the rows before 30 Jun 2026 and any bout without an HC copy stay vendor until it lands. | the `build` issue's live probe of the `samples` feature | — | filed (GH#634, `build`) |
+| 6 | Native Polar per-second sample ingest (AccessLink `samples`)? | Build issue; the rows before 30 Jun 2026 and any bout without an HC copy stay vendor until it lands. **Rescoped (#506):** the Flow export already carries the samples; `import_polar` stores them as `hr_samples` (`polar_flow_export` on both columns) and `POLAR_SAMPLE_WRITERS` reads them, so a re-upload of the export re-zones its rows; the AccessLink fetch is now optional (the `polar_v4` rows with no export copy and no HC copy). | `tests/test_polar_export_samples.py`; the import summary's `hr_samples_found` on the operator's re-upload (0 with members found = the sample path is not `exercises[0].samples.heartRate`, read with `import_polar.py --keys`); `get_zone_coverage` after the next chain run | two-way (reverse-by: drop `POLAR_EXPORT_WRITER` from `POLAR_SAMPLE_WRITERS`; the samples stay) | rescoped in-PR (ruling, #506); GH#634 stays `build` for the AccessLink fetch |
 
 ## Decisions landed
 
 - #502 — the model, R1 to R8 recorded; rows 1, 2, 3, 5 as rulings under the same entry (number resolved at master max #501; re-resolve if master advances before the release lands).
 - #503 — R8 ruled YES (row 4 resolved, 2026-11-05); the last open row, so this doc moved `discussion` → `committed`.
 - #504 — ruling: the anchor restatement no-op test is on (value, provenance), not value alone.
+- #506 — ruling: the Flow export's per-second HR is stored in `hr_samples` and zoned on the model (row 6 rescoped; the export writer joins `POLAR_SAMPLE_WRITERS`; one writer per bout, the densest).

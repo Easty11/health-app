@@ -8,13 +8,17 @@ inputs and writes its outputs:
 * the zone spec in force on the row's local session date: the basis from the row's raw
   `sport_name` (`sport_classes.zone_basis_for`, Q164) and the anchors in force (`user_hrmax`,
   `user_hr_anchors`; append-only, dated; `hr_zones.resolve_zone_spec`);
-* the samples inside the row's [start_time, stop_time]:
+* the samples inside the row's [start_time, stop_time], from the WRITERS a row may be zoned from
+  (`sample_writers_for`: `(source, source_package)` pairs of `hr_samples`):
   - a `health_connect` row reads `hr_samples` written by the SAME writer as the row
-    (`source_package` equal) — a ring's HR inside a Garmin bout is never used for it;
-  - a Polar row (`polar_v4`, `polar_flow_export`) reads the H10 trace of the same bout where it
-    already lives: `hr_samples` written through Health Connect by `POLAR_SAMPLE_WRITERS`
-    (`fi.polar.polarflow`, the Polar Flow app). Polar's own per-second samples are not stored
-    (0005 appendix; the native ingest is a `build` issue), so this is the R2 "samples exist" branch.
+    (`source_package` equal, through Health Connect) — a ring's HR inside a Garmin bout is never used for it;
+  - a Polar row (`polar_v4`, `polar_flow_export`) reads the H10 trace of the same bout from the Polar
+    writers (`POLAR_SAMPLE_WRITERS`): the Polar Flow app's Health Connect copy (`fi.polar.polarflow`)
+    and the Flow export's own samples (`import_polar` writes them as `polar_flow_export`, both columns).
+    This is the R2 "samples exist" branch; the AccessLink `samples` fetch (GH#634) stays optional.
+  When more than one permitted writer holds samples inside the window, the DENSEST (most samples in
+  the window) is zoned from alone; streams are never mixed (`_row_samples`). Ties keep the order of
+  the writer tuple.
 
 Recompute from samples on every run, so late HR and a changed anchor both reflow. A `health_connect`
 row that now zones is written (z1-z5, hr_avg, hr_max); one that is withheld goes back to its stage-1
@@ -41,9 +45,16 @@ from hr_zones import PLAUSIBLE_BPM, REASONS, ZoneSpec, entry_from_row, hrmax_in_
 from reads.aerobic_reads import HEALTH_CONNECT, arbitrated_sessions, twins_by_canonical
 from sport_classes import zone_basis_for
 
-# The Health Connect writers whose samples are the trace of a POLAR-recorded bout (design 0010 row 1).
-# Empty tuple = pure vendor fallback for every Polar row (the reverse-by).
-POLAR_SAMPLE_WRITERS: tuple[str, ...] = ("fi.polar.polarflow",)
+# A writer of `hr_samples`, as the row-to-samples rule names it: `(source, source_package)`.
+Writer = tuple[str, str]
+
+# The writers whose samples are the trace of a POLAR-recorded bout (design 0010 row 1; row 6 rescoped):
+# the Polar Flow app's Health Connect copy, and the Flow export's own per-second HR (`import_polar`,
+# `EXPORT_SAMPLE_SOURCE`). Empty tuple = pure vendor fallback for every Polar row (the reverse-by);
+# dropping the export pair alone returns the export-only rows to vendor fallback (its samples stay).
+POLAR_FLOW_HC_WRITER: Writer = (HEALTH_CONNECT, "fi.polar.polarflow")
+POLAR_EXPORT_WRITER: Writer = ("polar_flow_export", "polar_flow_export")
+POLAR_SAMPLE_WRITERS: tuple[Writer, ...] = (POLAR_FLOW_HC_WRITER, POLAR_EXPORT_WRITER)
 POLAR_SOURCES = ("polar_v4", "polar_flow_export")
 
 
@@ -55,28 +66,39 @@ def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
-def sample_writers_for(row: models.AerobicSession) -> tuple[str, ...]:
-    """The `hr_samples.source_package` values a row may be zoned from: its own writer for a
-    health_connect row; `POLAR_SAMPLE_WRITERS` for a Polar row; nothing for any other source."""
+def sample_writers_for(row: models.AerobicSession) -> tuple[Writer, ...]:
+    """The `hr_samples` writers (`(source, source_package)` pairs) a row may be zoned from: its own
+    Health Connect writer for a health_connect row (the same-writer rule); `POLAR_SAMPLE_WRITERS` for
+    a Polar row; nothing for any other source."""
     if row.source == HEALTH_CONNECT:
-        return (row.source_package or "unknown",)
+        return ((HEALTH_CONNECT, row.source_package or "unknown"),)
     if row.source in POLAR_SOURCES:
         return POLAR_SAMPLE_WRITERS
     return ()
 
 
-def _row_samples(db: Session, user_id: int, row: models.AerobicSession,
-                 start: datetime, stop: datetime) -> list[tuple[datetime, int]]:
-    writers = sample_writers_for(row)
-    if not writers:
-        return []
+def _writer_samples(db: Session, user_id: int, writer: Writer,
+                    start: datetime, stop: datetime) -> list[tuple[datetime, int]]:
+    source, package = writer
     q = (db.query(models.HrSample.sample_time, models.HrSample.bpm)
          .filter(models.HrSample.user_id == user_id,
-                 models.HrSample.source == HEALTH_CONNECT,
-                 models.HrSample.source_package.in_(writers),
+                 models.HrSample.source == source,
+                 models.HrSample.source_package == package,
                  models.HrSample.sample_time >= start,
                  models.HrSample.sample_time <= stop))
     return [(_utc(t), b) for t, b in q.all()]
+
+
+def _row_samples(db: Session, user_id: int, row: models.AerobicSession,
+                 start: datetime, stop: datetime) -> list[tuple[datetime, int]]:
+    """The samples a row is zoned from: ONE permitted writer's samples inside [start, stop], the
+    densest (most samples in the window) when several hold any; streams are never mixed. Ties keep
+    the writer tuple's order (`max` returns the first maximum)."""
+    writers = sample_writers_for(row)
+    if not writers:
+        return []
+    streams = [_writer_samples(db, user_id, w, start, stop) for w in writers]
+    return max(streams, key=len) if streams else []
 
 
 def anchor_entries(db: Session, user_id: int) -> dict[str, list]:
