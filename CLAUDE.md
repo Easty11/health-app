@@ -330,11 +330,11 @@ _Pointer-only. Capped at the 3 most recent — one line each, canonical home onl
 test counts / decision sub-bullets. Full history: `DECISIONS_LOG.md`. Latest handoff:
 `closeout.md`. Forward-looking work: `ROADMAP.md` NOW/NEXT (not this block)._
 
+- **Zone coverage is derived on read: the MCP `get_zone_coverage` tool reports per-source zoning (lthr / hrr / vendor / no_anchor / withheld, the Polar split) live from `row_zoning`; chain reports stay unpersisted.** Code - Canonical home: `DECISIONS_LOG.md` #505.
+
 - **R8 is ruled: a seeded anchor takes the earliest session date as its best current estimate (design 0010 `committed`), and a same-value anchor restatement under a new provenance is a real restatement, because provenance drives the retest flag.** Code - Canonical home: `DECISIONS_LOG.md` #503, #504.
 
 - **HR zones are threshold-anchored per sport class (cycling on %LTHR, every other sport on %HRR) over dated, append-only LTHR and RHR anchors the Settings card seeds; the metabolic formula is `metab-v2`; GH#634 and GH#635 filed.** Code - Canonical home: `DECISIONS_LOG.md` #502; design 0010.
-
-- **Confirmed rows are visible and resolvable on their injury card at any time, and GH#608 is ruled: coach proposals from clinical material are allowed proposal-gated, authority is chosen at confirm, and the coach never supersedes an operator-written row.** Code - Canonical home: `DECISIONS_LOG.md` #501.
 
 
 
