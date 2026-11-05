@@ -1895,6 +1895,48 @@ def list_proposals(
     ]
 
 
+@router.get("/confirmed", response_model=list[KnowledgeEntryOut])
+def list_confirmed(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Active CONFIRMED constraints and active `open` / `confirmed` findings — the rows in force
+    (GH#622; DECISIONS_LOG "Confirmed rows are visible and resolvable at any time").
+
+    Before this read a confirmed row surfaced in-app only through `/review-due`, once past its
+    `review_by` or `exit.on_date` or with its parent resolved; a row the clinician had overtaken
+    stayed confirmed and unreachable until its date (prod, 5 Nov 2026: #110 and #102 until
+    2026-11-16). This lists what the engine and the coach read, so the Injuries page can show each
+    row on its injury's card with Resolve available at any time, through the existing
+    `/constraints/{id}/resolve` and `/findings/{id}/retract` routes. SURFACING ONLY, like
+    `/proposals` and `/review-due`: nothing is lifted here, and the sweep is unchanged.
+
+    The same statuses the lifts read (`typed_entries.CONSTRAINT_READ_STATUSES` /
+    `FINDING_READ_STATUSES`), so the list cannot disagree with what is enforced. A finding not
+    explicitly `derived_from_labs: false` is left out (the #60 firewall).
+    """
+    rows = (
+        db.query(models.UserKnowledgeEntry)
+        .filter(
+            models.UserKnowledgeEntry.user_id == current_user.id,
+            models.UserKnowledgeEntry.type.in_(TYPED_ENTRY_TYPES),
+            models.UserKnowledgeEntry.active == True,
+        )
+        .order_by(models.UserKnowledgeEntry.added_at.desc(), models.UserKnowledgeEntry.id.desc())
+        .all()
+    )
+    return [
+        r for r in rows
+        if (
+            (r.type == "constraint"
+             and (r.value or {}).get("status") in typed_entries.CONSTRAINT_READ_STATUSES)
+            or (r.type == "finding"
+                and (r.value or {}).get("status") in typed_entries.FINDING_READ_STATUSES
+                and (r.value or {}).get("derived_from_labs") is False)
+        )
+    ]
+
+
 class ReviewDueItem(BaseModel):
     id: int
     type: str                    # "constraint" | "finding"
