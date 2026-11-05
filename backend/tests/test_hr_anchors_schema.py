@@ -51,7 +51,8 @@ def test_the_revision_chains_from_the_prior_head_in_one_line():
     cfg.set_main_option("script_location", str(_BACKEND / "migrations"))
     script = ScriptDirectory.from_config(cfg)
     assert len(script.get_heads()) == 1, "migration history branched"
-    assert script.get_heads() == ["e7b2a4c9d1f3"]
+    # No longer the head (a9d3f5b7c2e4, garmin_activity_metrics, revises it); still on the single line.
+    assert "e7b2a4c9d1f3" in {r.revision for r in script.walk_revisions(base="base", head=script.get_heads()[0])}
     assert script.get_revision("e7b2a4c9d1f3").down_revision == "c4a8e2f6b190"
 
 
