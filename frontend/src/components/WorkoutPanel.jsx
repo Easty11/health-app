@@ -68,7 +68,37 @@ function normalizePolar(s) {
     },
     // What zoned this row (design 0010): derived server-side, shown as sent under the zone bar.
     zoning: s.zoning || null,
+    // Garmin's own figures for the Garmin activity this row overlaps (placed server-side by overlap).
+    // Vendor composites, display only: they never feed Pocket load.
+    garmin_metrics: s.garmin_metrics || null,
   }
+}
+
+// Garmin's vendor tiles: kcal, Training Effect aerobic / anaerobic, Garmin load, as Garmin sent them. A field
+// Garmin did not send shows a dash. Labelled as Garmin's so they never read as the platform's own load.
+function GarminTiles({ m }) {
+  if (!m) return null
+  const te = (v) => (v != null ? Number(v).toFixed(1) : '—')
+  const tiles = [
+    ['kcal', m.calories != null ? Math.round(m.calories) : '—'],
+    ['TE aerobic', te(m.te_aerobic)],
+    ['TE anaerobic', te(m.te_anaerobic)],
+    ['Garmin load', m.training_load != null ? Math.round(m.training_load) : '—'],
+  ]
+  return (
+    <div data-testid="garmin-tiles">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Garmin</p>
+      <div className="grid grid-cols-4 gap-2 text-center">
+        {tiles.map(([label, value]) => (
+          <div key={label} className="bg-sky-50 rounded-xl p-2">
+            <p className="text-sm font-bold text-sky-700">{value}</p>
+            <p className="text-[11px] text-sky-500">{label}</p>
+          </div>
+        ))}
+      </div>
+      {m.te_label && <p className="text-[11px] text-gray-400 mt-1">Garmin's label: {m.te_label}</p>}
+    </div>
+  )
 }
 
 // One provenance line under the zone bar: the class, the basis and the anchors that produced the zones, or that
@@ -358,6 +388,8 @@ function PolarDetail({ session, onBack, onFeedback }) {
             </div>
           </div>
         )}
+
+        <GarminTiles m={session.garmin_metrics} />
 
         {Object.values(zones).some(v => v > 0) && (
           <div className="bg-gray-50 rounded-xl p-3 space-y-2">
