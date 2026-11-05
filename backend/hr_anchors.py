@@ -9,7 +9,9 @@ updated or deleted, and the two kinds of change are told apart by the caller's F
 * `change="restate"`: a correction from better evidence about the same physiology. Carries the SAME
   `effective_from` as the row it corrects (the date must already have a row), stands in for that row over
   its whole span, reflows history. `rationale` is required. Restating an already-restated date corrects
-  the latest of the chain.
+  the latest of the chain. The no-op test is on (bpm, provenance), not bpm alone: provenance is part of
+  the row's meaning (it drives the retest flag), so the same value re-evidenced under a new provenance is
+  a real restatement; only a row identical in both is refused (#504).
 
 `plan` (the bpm preview before commit, R6) reports, for today, each class's bpm edges before and after
 the append, and the `aerobic_sessions` rows whose zone spec would change (count and ids), so the
@@ -82,17 +84,20 @@ def validate(*, kind: str, bpm: int, effective_from: date, provenance: str, note
     return r
 
 
-def plan(db: Session, user_id: int, *, kind: str, bpm: int, effective_from: date, change: str,
+def plan(db: Session, user_id: int, *, kind: str, bpm: int, effective_from: date, provenance: str, change: str,
          today: date) -> dict[str, Any]:
     """The preview: today's bpm edges per class before and after, the rows whose spec changes, and the
-    row a restatement corrects (None for a dated change). Raises `AnchorRefused` when the append would be."""
+    row a restatement corrects (None for a dated change). Raises `AnchorRefused` when the append would be.
+    A restatement is a no-op, and refused, only when BOTH the value and the provenance match the row it
+    would correct: a new provenance for the same value changes what the row means (the retest flag)."""
     rows = anchor_rows(db, user_id)
     target = None
     if change == "restate":
         target = _restatement_target(rows[kind], effective_from, kind)
-        if target.bpm == bpm:
-            raise AnchorRefused(f"{kind.upper()} dated {effective_from} is already {bpm}; "
-                                "a restatement to the same value changes nothing")
+        if target.bpm == bpm and target.provenance == provenance:
+            raise AnchorRefused(f"{kind.upper()} dated {effective_from} is already {bpm} bpm, {provenance}; "
+                                "a restatement to the same value and provenance changes nothing (the same value "
+                                "under a different provenance is a restatement: it re-evidences the row)")
     else:
         dup = next((r for r in rows[kind] if r.effective_from == effective_from and r.restates_id is None), None)
         if dup is not None:
@@ -115,7 +120,8 @@ def plan(db: Session, user_id: int, *, kind: str, bpm: int, effective_from: date
             touched.append({"id": s.id, "date": s.session_date.isoformat(), "sport": s.sport_name, "source": s.source,
                             "from": list(sb.edges_bpm) if sb else None, "to": list(sa.edges_bpm) if sa else None})
     return {
-        "kind": kind, "bpm": bpm, "effective_from": effective_from.isoformat(), "change": change,
+        "kind": kind, "bpm": bpm, "effective_from": effective_from.isoformat(), "provenance": provenance,
+        "change": change,
         "classes_before": class_specs(before, today), "classes_after": class_specs(after, today),
         "rows_changed": len(touched), "rows": touched[:50],
         "restates": None if target is None else {"id": target.id, "bpm": target.bpm, "provenance": target.provenance,
@@ -128,7 +134,8 @@ def append(db: Session, user_id: int, *, kind: str, bpm: int, effective_from: da
     """Validate, plan, insert ONE row, commit. Never updates or deletes. Returns the plan plus `written`."""
     r = validate(kind=kind, bpm=bpm, effective_from=effective_from, provenance=provenance, note=note,
                  change=change, rationale=rationale)
-    p = plan(db, user_id, kind=kind, bpm=bpm, effective_from=effective_from, change=change, today=today)
+    p = plan(db, user_id, kind=kind, bpm=bpm, effective_from=effective_from, provenance=provenance, change=change,
+             today=today)
     row = models.UserHrAnchor(user_id=user_id, kind=kind, effective_from=effective_from, bpm=bpm,
                               provenance=provenance, note=note.strip(),
                               restates_id=p["restates"]["id"] if p["restates"] else None, rationale=r)

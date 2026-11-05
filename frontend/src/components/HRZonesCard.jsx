@@ -93,7 +93,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  // R8 (pending the operator's OK): a kind with no entry yet defaults to the earliest session date; editable.
+  // R8 (ruled 2026-11-05, design 0010 row 4): a kind with no entry yet defaults to the earliest session date; editable.
   useEffect(() => {
     const a = cfg.anchors[kind]
     setEffectiveFrom(a?.in_force ? '' : (cfg.default_effective_from || ''))
@@ -147,7 +147,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
       </div>
       {!cfg.anchors[kind]?.in_force && (
         <p className="text-[11px] text-gray-500" data-testid="r8-note">
-          First entry: the date defaults to the earliest session (R8, pending the operator's OK); change it if the value held from a different date.
+          First entry: the date defaults to the earliest session (R8, the best current estimate); change it if the value held from a different date.
         </p>
       )}
       <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence (required): e.g. Garmin auto-detect 2026-10-28" className={input} data-testid="anchor-note" />
@@ -159,7 +159,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
         </label>
         <label className="flex items-start gap-2">
           <input type="radio" name="change" value="restate" checked={change === 'restate'} onChange={() => setChange('restate')} />
-          <span><span className="font-medium">Restatement</span> — a correction from better evidence; replaces the entry dated this date over its whole span (history reflows).</span>
+          <span><span className="font-medium">Restatement</span> — a correction from better evidence; replaces the entry dated this date over its whole span (history reflows). The same value under a new provenance counts; the same value and provenance is refused.</span>
         </label>
       </fieldset>
       {change === 'restate' && (
@@ -172,6 +172,13 @@ function AnchorForm({ cfg, onDone, showToast }) {
             Preview: {preview.rows_changed} session{preview.rows_changed === 1 ? '' : 's'} re-zone
             {preview.restates ? ` · restates the ${preview.restates.bpm} bpm entry (${preview.restates.provenance})` : ''}
           </p>
+          {preview.restates && preview.restates.bpm === preview.bpm && (
+            // The no-op test is on (value, provenance): a same-value restatement is accepted when the provenance
+            // changes, because provenance is part of the row's meaning (it drives the retest flag).
+            <p className="text-[11px] text-gray-500" data-testid="anchor-preview-reevidence">
+              Same value; the provenance moves {preview.restates.provenance} → {preview.provenance || provenance}. No band changes; the retest flag follows the new provenance.
+            </p>
+          )}
           {['lthr', 'hrr'].map((k) => {
             const b = bandLabels(clsBefore(k)?.edges_bpm), a = bandLabels(cls(k)?.edges_bpm)
             if (!a && !b) return null

@@ -122,7 +122,7 @@ def test_the_config_read_carries_classes_anchors_retest_default_date_and_the_gar
     assert a["lthr"]["in_force"]["provenance"] == "device_estimated" and a["lthr"]["retest"] is True
     assert a["rhr"]["retest"] is False and a["rhr"]["writable"] is True and len(a["rhr"]["entries"]) == 1
     assert cfg["default_effective_from"] == (S - timedelta(days=200) + timedelta(hours=10)).date().isoformat()
-    assert cfg["r8_pending"] is True
+    assert "r8_pending" not in cfg        # R8 is ruled (design 0010 row 4); the default date is the rule, not a proposal
     assert cfg["garmin"]["profile"]["cycling"]["basis"] == "%LTHR" and cfg["garmin"]["profile"]["default"]["bands"][1] == "60-69"
     assert cfg["garmin"]["snapshot"]["lthr_bpm"] == 158 and cfg["garmin"]["snapshot"]["rhr_7d_auto_bpm"] == 49
     assert cfg["hrmax_prompts"] == []
@@ -320,7 +320,8 @@ def test_plan_names_the_rows_a_first_anchor_would_zone(db_session):
     _hrmax(db_session, u.id)
     _anchor(db_session, u.id, "lthr", 158)
     walk = _row(db_session, u.id, "walk", sport="Walking")
-    p = hr_anchors.plan(db_session, u.id, kind="rhr", bpm=51, effective_from=date(2026, 3, 1), change="dated", today=TODAY)
+    p = hr_anchors.plan(db_session, u.id, kind="rhr", bpm=51, effective_from=date(2026, 3, 1), provenance="stated",
+                        change="dated", today=TODAY)
     assert p["rows_changed"] == 1 and p["rows"][0]["id"] == walk.id and p["rows"][0]["from"] is None
     assert p["rows"][0]["to"] == [115, 128, 141, 154, 167]
 
@@ -332,5 +333,42 @@ def test_restating_an_already_restated_date_corrects_the_latest(db_session):
     first = hr_anchors.append(db_session, u.id, bpm=49, rationale="first", **kw)
     second = hr_anchors.append(db_session, u.id, bpm=47, rationale="second", **kw)
     assert first["restates"]["id"] == seed.id and second["restates"]["bpm"] == 49
-    with pytest.raises(hr_anchors.AnchorRefused, match="already 47"):
+    with pytest.raises(hr_anchors.AnchorRefused, match="already 47 bpm, observed"):
         hr_anchors.append(db_session, u.id, bpm=47, rationale="same", **kw)
+
+
+# ---- the no-op test is on (value, provenance), not value alone (#504) -------------------------------------------
+
+def test_the_same_value_under_a_new_provenance_is_a_restatement_and_moves_the_retest_flag(db_session, client):
+    """The operator's own case: LTHR 158 seeded `observed`, restated 158 `device_estimated` (Garmin auto-detect).
+    Provenance is part of the row's meaning (it drives the retest flag), so the write is accepted, the chain
+    records it, and the in-force entry now reads retest."""
+    u, c = client
+    _hrmax(db_session, u.id)
+    seed = _anchor(db_session, u.id, "lthr", 158, prov="observed")
+    body = {"kind": "lthr", "bpm": 158, "effective_from": "2026-03-01", "provenance": "device_estimated",
+            "note": "Garmin auto-detect 2026-10-28", "change": "restate", "rationale": "the 158 was Garmin's estimate, not a strap read"}
+    p = c.post("/hr-zones/anchors/preview", json=body)
+    assert p.status_code == 200, p.text
+    assert p.json()["restates"] == {"id": seed.id, "bpm": 158, "provenance": "observed", "effective_from": "2026-03-01"}
+    assert p.json()["provenance"] == "device_estimated" and p.json()["rows_changed"] == 0     # the bpm edges do not move
+    r = c.post("/hr-zones/anchors", json=body)
+    assert r.status_code == 201, r.text
+    rows = db_session.query(models.UserHrAnchor).filter_by(kind="lthr").order_by(models.UserHrAnchor.id).all()
+    assert [(x.bpm, x.provenance, x.restates_id) for x in rows] == [(158, "observed", None), (158, "device_estimated", seed.id)]
+    cfg = c.get("/hr-zones/config").json()["anchors"]["lthr"]
+    assert cfg["in_force"]["bpm"] == 158 and cfg["in_force"]["provenance"] == "device_estimated"
+    assert cfg["in_force"]["restates_id"] == seed.id and cfg["retest"] is True
+
+
+def test_the_same_value_under_the_same_provenance_is_still_refused(db_session, client):
+    u, c = client
+    _hrmax(db_session, u.id)
+    _anchor(db_session, u.id, "lthr", 158, prov="observed")
+    body = {"kind": "lthr", "bpm": 158, "effective_from": "2026-03-01", "provenance": "observed",
+            "note": "n", "change": "restate", "rationale": "r"}
+    for url in ("/hr-zones/anchors/preview", "/hr-zones/anchors"):
+        r = c.post(url, json=body)
+        assert r.status_code == 400, r.text
+        assert "already 158 bpm, observed" in r.json()["detail"] and "provenance" in r.json()["detail"]
+    assert db_session.query(models.UserHrAnchor).filter_by(kind="lthr").count() == 1
