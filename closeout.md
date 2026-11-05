@@ -1,14 +1,17 @@
-# Close-out — 6 Nov 2026: Garmin activity metrics (display only) and the activity HR stream (#507, #508; PR GH#642 HELD)
+# Close-out — 6 Nov 2026: Garmin activity metrics (display only) and the activity HR stream (#507, #508; PR GH#642 released)
 
 ## Real commits this session
 
 Session opened at health-app master `10b59e5` (the merge of PR GH#641, the previous close-out), the anchor the brief
 named. Maxima at open: `DECISIONS_LOG` #506, no open `fork` issue. At close: #508 on this branch (#507 and #508
-resolved at master max #506; **re-resolve at the merge if master advances**), still no open `fork` issue; no issue
+resolved at master max #506 and re-read unchanged immediately before the merge), still no open `fork` issue; no issue
 filed or touched.
 
-One harness-assigned branch, `claude/quirky-faraday-wmnjvk` (accepted per #387), one PR, GH#642. It is
-ready-for-review and **not merged**, because it carries a schema migration (§ Merge disposition, one-way door). Six commits:
+One harness-assigned branch, `claude/quirky-faraday-wmnjvk` (accepted per #387), one PR, GH#642. It opened
+ready-for-review and was held, because it carries a schema migration (§ Merge disposition, one-way door). The operator
+released it in-session ("merge when green"). It merges on green with `--merge` and the branch is deleted at merge. The
+merge SHA and the `deploy-check` run are reported in the session's final message, because this file is written before the
+merge. Seven commits:
 
 | Commit | What |
 |---|---|
@@ -17,7 +20,7 @@ ready-for-review and **not merged**, because it carries a schema migration (§ M
 | `554abce` feat(garmin) backfill | `scripts/garmin_activity_backfill.py` and its tests. |
 | `12cb835` feat(ui) | The "Garmin" tiles on the session detail. |
 | `a1fd11d` docs | Design 0010 row 7, plus the details endpoint row in the Personal API plan. |
-| the `gov(garmin-metrics)` commit (this file rides it) | `DECISIONS_LOG` #507 and #508, the ROADMAP zone-model row (Part B), the `BRANCHES.md` row, the `CLAUDE.md` Recent-landings pointer (the #505 pointer dropped under the cap of 3), and this file. |
+| the `gov(garmin-metrics)` commit, plus a release follow-up (this file rides them) | `DECISIONS_LOG` #507 and #508, the ROADMAP zone-model row (Part B), the `BRANCHES.md` row, the `CLAUDE.md` Recent-landings pointer (the #505 pointer dropped under the cap of 3), and this file. |
 
 **Step 1 VERIFY, before code. No mismatch, so no halt.**
 
@@ -65,9 +68,9 @@ Metrics - Echo Bike Zones Review`. Each step against where it landed:
 - **Step 6 display and guard**: DONE `4343f46` and `12cb835`.
 - **Step 7 probe message**: DONE `4343f46`.
 - **Step 8 tests**: DONE across those commits.
-- **Step 9**: DONE. The commits are concern-split, and the PR is ready-for-review and not merged.
+- **Step 9**: DONE. The commits are concern-split. The PR was held, then released by the operator and merged on green.
 - **LOG**: #507 and #508 in the gov commit, worded from the brief. #508 also records the resolution handling.
-- **Provisional**: the decision numbers only. Re-read master's max before the merge.
+- **Provisional**: nothing. Master's max was re-read as #506 immediately before the merge.
 
 ## Cold-resume handoff
 
@@ -75,7 +78,7 @@ Metrics - Echo Bike Zones Review`. Each step against where it landed:
 
 - **Zone model.** DONE and seeded. #503 to #506 have landed and the export path is fixed. Part B (this PR) is BUILT and HELD.
 - **OWED (operator), from the previous session.** Re-upload the Flow export and read its HR-samples line. Open the Training page. Ask chat for `get_zone_coverage`. Restate LTHR 158 as `device_estimated`. Report back a Z2 Echo-bike ride read on its card.
-- **OWED (operator), this PR.** Release GH#642. Then run the backfill dry run and live run, and paste the counts.
+- **OWED, this PR.** The deploy check (Code, in-session). Then the backfill dry run and live run, with the counts pasted (operator).
 - **Unchanged.** Ledger UX follow-ups (GH#622 to GH#629), coach ledger writes (GH#612 to GH#617), injury lifecycle (design 0009) and the wake-day three-morning gate.
 
 **Open `fork` issues.** None.
@@ -84,17 +87,17 @@ Metrics - Echo Bike Zones Review`. Each step against where it landed:
 
 **Branch gate.**
 
-- `claude/quirky-faraday-wmnjvk` is rowed BLOCKED in `BRANCHES.md`. The blocker is the operator's release of the migration.
+- `claude/quirky-faraday-wmnjvk` is rowed DONE in `BRANCHES.md`, merged and deleted at merge.
 - `chat/render-status-transport` and `claude/cbti-verdict-table` were not touched. They belong to other sessions, as reported before.
 
 **Not touched this session (named so it is not read as finished).**
 
-- The backfill itself, and therefore the resolution finding. These are operator acts after the release.
+- The backfill itself, and therefore the resolution finding. These are operator acts.
 - GH#635 (Garmin time-in-zone cross-check), GH#634 (AccessLink samples), Q231, #365 and the Polar relabel limbs.
 - No companion-app work and no `FEEDBACK.md` change.
 - Six consecutive sessions have now gone to the zone model and its inputs. The Z2 ride read on its card is still not reported back.
 
-**The single clearest next action (operator).** Release GH#642. Once `deploy-check` is green on both services, run these in `railway ssh --service health-app-backend` from `/app`:
+**The single clearest next action (operator).** Once `deploy-check` is green on both services, run these in `railway ssh --service health-app-backend` from `/app`:
 
 1. `/opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --limit 5`, a quick dry run.
 2. The same command without `--limit`.
