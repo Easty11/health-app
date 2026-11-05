@@ -11,10 +11,14 @@ observation only, never an anchor).
 force, never stored (0010 §4). A Polar row reads `vendor` unless the Health Connect trace of the same bout
 covers it, in which case it reads the model's basis — the same test `hc_zone_enrich` applies, so the read and
 the fill agree.
+
+`zone_coverage` answers "how is every row zoned now" (the MCP `get_zone_coverage` tool): per source the count
+per category, each row classified by `row_zoning` and nothing else. The chain report `hc_zone_enrich.enrich_user`
+returns is never persisted, so coverage is derived on read, not recorded per run.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import func
@@ -171,6 +175,87 @@ def annotate_zoning(db: Session, user_id: int, rows: list) -> list:
     return rows
 
 
+# ── coverage: how every row is zoned, derived on read ────────────────────────────────────────────
+
+COVERAGE_CATEGORIES = ("lthr", "hrr", "vendor", "no_anchor", "withheld")
+COVERAGE_SAMPLE_CAP = 20
+
+
+def coverage_category(zoning: dict[str, Any]) -> str:
+    """One of `COVERAGE_CATEGORIES` for a `row_zoning` result. The reason wins when one is set, so the
+    categories partition the rows: `vendor` is exactly `polar_vendor_fallback` (anchors in force, no
+    Polar Flow trace covering the bout); a Polar row with NO anchor reads `no_anchor` here even though
+    its basis is `vendor` (the sessions API says both; the count keeps them apart)."""
+    reason = zoning.get("reason")
+    if reason == "polar_vendor_fallback":
+        return "vendor"
+    if reason in ("no_anchor", "withheld"):
+        return reason
+    return zoning["basis"]            # lthr / hrr: zoned on the model
+
+
+def zone_coverage(db: Session, user_id: int, days: Optional[int] = None, *,
+                  today: Optional[date] = None) -> dict[str, Any]:
+    """How every `aerobic_sessions` row of the user is zoned NOW, per source, derived live from
+    `row_zoning` (the same path as the sessions API's `zoning` field) with the anchors read once.
+    READ-ONLY: nothing is written, nothing committed. Nothing persists the chain report
+    (`hc_zone_enrich.enrich_user` returns and prints it), so this is the one place to read coverage.
+
+    Every raw row is counted, twins included, because the fill zones every raw row (a non-canonical
+    twin is zoned on its own and shows on its own card). `days` limits the rows to
+    `session_date >= today - days`; None is all history.
+
+    Returns `{as_of, days, since, total, date_range: {first, last}, by_source: {source: {category: n}},
+    totals: {category: n}, polar: {rows, rezoned, vendor_fallback, vendor_no_anchor}, rows: [...]}`,
+    where `rows` lists up to `COVERAGE_SAMPLE_CAP` rows that are not zoned on the model (`vendor`,
+    `no_anchor`, `withheld`), oldest first, each `{id, date, sport, source, basis, reason}`."""
+    from hc_zone_enrich import POLAR_SOURCES
+    today = today or date.today()
+    since = today - timedelta(days=days) if days is not None else None
+    q = db.query(models.AerobicSession).filter(models.AerobicSession.user_id == user_id)
+    if since is not None:
+        q = q.filter(models.AerobicSession.session_date >= since)
+    rows = q.order_by(models.AerobicSession.session_date, models.AerobicSession.id).all()
+    entries = anchor_entries(anchor_rows(db, user_id))
+
+    by_source: dict[str, dict[str, int]] = {}
+    totals = {c: 0 for c in COVERAGE_CATEGORIES}
+    polar = {"rows": 0, "rezoned": 0, "vendor_fallback": 0, "vendor_no_anchor": 0}
+    sample: list[dict[str, Any]] = []
+    sample_overflow = 0
+    for r in rows:
+        z = row_zoning(db, user_id, r, entries)
+        cat = coverage_category(z)
+        by_source.setdefault(r.source, {c: 0 for c in COVERAGE_CATEGORIES})[cat] += 1
+        totals[cat] += 1
+        if r.source in POLAR_SOURCES:
+            polar["rows"] += 1
+            if z["basis"] in (BASIS_LTHR, BASIS_HRR):
+                polar["rezoned"] += 1
+            elif z["reason"] == "polar_vendor_fallback":
+                polar["vendor_fallback"] += 1
+            else:
+                polar["vendor_no_anchor"] += 1
+        if cat in ("vendor", "no_anchor", "withheld"):
+            if len(sample) < COVERAGE_SAMPLE_CAP:
+                sample.append({"id": r.id, "date": r.session_date.isoformat(), "sport": r.sport_name,
+                               "source": r.source, "basis": z["basis"], "reason": z["reason"]})
+            else:
+                sample_overflow += 1
+    return {
+        "as_of": today.isoformat(),
+        "days": days,
+        "since": since.isoformat() if since else None,
+        "total": len(rows),
+        "date_range": {"first": rows[0].session_date.isoformat(), "last": rows[-1].session_date.isoformat()} if rows else None,
+        "by_source": by_source,
+        "totals": totals,
+        "polar": polar,
+        "rows": sample,
+        "rows_not_listed": sample_overflow,
+    }
+
+
 # ── MCP formatter ─────────────────────────────────────────────────────────────────────────────────
 
 def _edge_text(edges: Optional[list[int]]) -> str:
@@ -214,4 +299,43 @@ def format_zone_config(cfg: dict[str, Any]) -> str:
                      f"LTHR {snap['lthr_bpm']}, 7-day auto RHR {snap['rhr_7d_auto_bpm']}, method {snap['method']}")
     lines.append("  RHR is the stored, dated anchor, never the live daily device RHR (R3). "
                  "HRmax is written only by scripts/set_hrmax.py; LTHR and RHR by the Settings card, append-only.")
+    return "\n".join(lines)
+
+
+COVERAGE_LABELS = {"lthr": "lthr", "hrr": "hrr", "vendor": "vendor (polar_vendor_fallback)",
+                   "no_anchor": "no_anchor", "withheld": "withheld"}
+
+
+def _counts_text(counts: dict[str, int]) -> str:
+    return " · ".join(f"{COVERAGE_LABELS[c]} {counts[c]}" for c in COVERAGE_CATEGORIES)
+
+
+def format_zone_coverage(cov: dict[str, Any]) -> str:
+    window = f"last {cov['days']} days, since {cov['since']}" if cov["days"] is not None else "all history"
+    lines = [f"Zone coverage (as of {cov['as_of']}; {window}; design 0010: every raw aerobic_sessions row, "
+             f"twins included, as the fill zones them)"]
+    if cov["total"] == 0:
+        lines.append("  no aerobic sessions in the window")
+    else:
+        rng = cov["date_range"]
+        lines.append(f"  {cov['total']} row{'s' if cov['total'] != 1 else ''}, {rng['first']} to {rng['last']}: "
+                     f"{_counts_text(cov['totals'])}")
+        for source in sorted(cov["by_source"]):
+            counts = cov["by_source"][source]
+            lines.append(f"  {source} ({sum(counts.values())}): {_counts_text(counts)}")
+        p = cov["polar"]
+        if p["rows"]:
+            lines.append(f"  Polar rows {p['rows']}: polar_rezoned {p['rezoned']} (zoned on the model from the "
+                         f"fi.polar.polarflow trace) · polar_vendor_fallback {p['vendor_fallback']} (Polar's own zones "
+                         f"kept: anchors in force, no trace covering the bout) · vendor with no anchor "
+                         f"{p['vendor_no_anchor']} (counted under no_anchor above)")
+        if cov["rows"]:
+            n = len(cov["rows"])
+            more = f"; {cov['rows_not_listed']} more not listed" if cov["rows_not_listed"] else ""
+            lines.append(f"  rows not zoned on the model (oldest first, first {n}{more}):")
+            for r in cov["rows"]:
+                lines.append(f"    row {r['id']} {r['date']} {r['sport']} [{r['source']}]: {r['reason']}"
+                             + (f" (basis {r['basis']})" if r["basis"] else ""))
+    lines.append("  Counts are derived live from reads.zone_reads.row_zoning, the sessions API's zoning path; "
+                 "the refresh_load chain report is not stored, so no run-to-run delta is available here.")
     return "\n".join(lines)
