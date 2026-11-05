@@ -510,10 +510,11 @@ def test_chat_cannot_deactivate_a_confirmed_constraint(db_session):
     assert confirmed.active
 
 
-def test_chat_may_withdraw_a_proposal(db_session):
-    """Negative control for the deactivation guard."""
+def test_chat_may_withdraw_its_own_proposal(db_session):
+    """Negative control for the deactivation guard: a proposal CHAT wrote is chat's to withdraw. (An
+    operator-written proposal, `source: "api"`, is not — R3, `test_coach_ledger_guidance.py`.)"""
     u = _user(db_session)
-    proposed = _write(db_session, u.id, _engine(status="proposed", asserted_by=None))
+    proposed = _write(db_session, u.id, _engine(status="proposed", asserted_by=None), source="chat")
     _, _, results = _chat(db_session, u.id, {"type": "constraint", "key": "c_hinge", "active": False})
     assert results[0].saved is True and results[0].reason_code == "deactivated"
     db_session.refresh(proposed)
