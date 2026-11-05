@@ -159,7 +159,7 @@ function AnchorForm({ cfg, onDone, showToast }) {
         </label>
         <label className="flex items-start gap-2">
           <input type="radio" name="change" value="restate" checked={change === 'restate'} onChange={() => setChange('restate')} />
-          <span><span className="font-medium">Restatement</span> — a correction from better evidence; replaces the entry dated this date over its whole span (history reflows).</span>
+          <span><span className="font-medium">Restatement</span> — a correction from better evidence; replaces the entry dated this date over its whole span (history reflows). The same value under a new provenance counts; the same value and provenance is refused.</span>
         </label>
       </fieldset>
       {change === 'restate' && (
@@ -172,6 +172,13 @@ function AnchorForm({ cfg, onDone, showToast }) {
             Preview: {preview.rows_changed} session{preview.rows_changed === 1 ? '' : 's'} re-zone
             {preview.restates ? ` · restates the ${preview.restates.bpm} bpm entry (${preview.restates.provenance})` : ''}
           </p>
+          {preview.restates && preview.restates.bpm === preview.bpm && (
+            // The no-op test is on (value, provenance): a same-value restatement is accepted when the provenance
+            // changes, because provenance is part of the row's meaning (it drives the retest flag).
+            <p className="text-[11px] text-gray-500" data-testid="anchor-preview-reevidence">
+              Same value; the provenance moves {preview.restates.provenance} → {preview.provenance || provenance}. No band changes; the retest flag follows the new provenance.
+            </p>
+          )}
           {['lthr', 'hrr'].map((k) => {
             const b = bandLabels(clsBefore(k)?.edges_bpm), a = bandLabels(cls(k)?.edges_bpm)
             if (!a && !b) return null

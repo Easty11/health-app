@@ -147,6 +147,29 @@ test('a restatement needs its rationale, and a refusal shows the way out', async
   expect(api.post.mock.calls[0][1].rationale).toBe('the earlier read was taken standing')
 })
 
+test('a same-value restatement under a new provenance previews as a re-evidencing, not a refusal', async () => {
+  const reevidence = {
+    kind: 'lthr', bpm: 158, effective_from: '2026-03-01', provenance: 'device_estimated', change: 'restate', rows_changed: 0, rows: [],
+    restates: { id: 2, bpm: 158, provenance: 'observed', effective_from: '2026-03-01' },
+    classes_before: CFG.classes, classes_after: CFG.classes,
+  }
+  api.post.mockResolvedValue({ data: reevidence })
+  await renderIt()
+  await screen.findByTestId('anchor-form')
+  type('anchor-kind', 'lthr'); type('anchor-bpm', '158'); type('anchor-date', '2026-03-01'); type('anchor-note', 'Garmin auto-detect')
+  type('anchor-provenance', 'device_estimated')
+  fireEvent.click(within(screen.getByTestId('anchor-change')).getByDisplayValue('restate'))
+  type('anchor-rationale', 'the 158 was the device estimate, not a strap read')
+  await act(async () => { fireEvent.click(screen.getByTestId('anchor-preview-btn')) })
+  expect(api.post.mock.calls[0][1]).toEqual(expect.objectContaining({ kind: 'lthr', bpm: 158, provenance: 'device_estimated', change: 'restate' }))
+  const preview = await screen.findByTestId('anchor-preview')
+  expect(preview.textContent).toContain('0 sessions re-zone')
+  expect(preview.textContent).toContain('restates the 158 bpm entry (observed)')
+  expect(screen.getByTestId('anchor-preview-reevidence').textContent).toContain('observed → device_estimated')
+  expect(screen.queryByTestId('anchor-error')).toBeNull()
+  expect(screen.getByTestId('anchor-save-btn').disabled).toBe(false)
+})
+
 test('an unreadable config says so instead of rendering nothing', async () => {
   api.get.mockRejectedValue(new Error('500'))
   await renderIt()

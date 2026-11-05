@@ -53,7 +53,8 @@ def preview_anchor(body: AnchorIn, current_user: models.User = Depends(get_curre
                             provenance=body.provenance, note=body.note, change=body.change,
                             rationale=body.rationale)
         return hr_anchors.plan(db, current_user.id, kind=body.kind, bpm=body.bpm,
-                               effective_from=body.effective_from, change=body.change, today=_local_day())
+                               effective_from=body.effective_from, provenance=body.provenance, change=body.change,
+                               today=_local_day())
     except hr_anchors.AnchorRefused as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
