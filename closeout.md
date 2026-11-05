@@ -1,54 +1,98 @@
-# Close-out — 5 Nov 2026: zone model build (design 0010; `DECISIONS_LOG` #502; GH#634, GH#635 filed; released and merged, `37bfdbd`; anchors not yet seeded)
+# Close-out — 5 Nov 2026: R8 ruling record (design 0010 `committed`; `DECISIONS_LOG` #503, #504; PR GH#638)
 
 ## Real commits this session
 
-Session opened at health-app master `66d69d3` (the merge of PR 633, the previous close-out). Maxima at open: `DECISIONS_LOG` #501, no open `fork` issue. At close: #502 on the branch (resolved at master max #501; re-resolve if master advances before the release lands), still no open `fork` issue, GH#634 and GH#635 filed (`build`).
+Session opened at health-app master `28181dc` (the merge of PR 637, the previous close-out), the anchor the brief
+named. Maxima at open: `DECISIONS_LOG` #502, no open `fork` issue. At close: #503 and #504 on the branch (resolved at
+master max #502; re-resolve if master advances before the merge), still no open `fork` issue, no issue filed or touched.
 
-One harness-assigned branch, `claude/confident-shannon-ch8hwv`, two PRs: PR 636 (the build; a one-way door, held until the operator said `merge`, then landed by Code end-to-end: merge `37bfdbd`, all checks green on `1d5e4c9`) and the post-merge docs-only flip from the restarted branch (this file, the BRANCHES and ROADMAP rows, the CLAUDE.md pointer).
+One harness-assigned branch, `claude/eloquent-bardeen-lk9soc`, one PR (GH#638), three commits:
 
 | Commit | What |
 |---|---|
-| `5ad65a9` docs(design): 0010 threshold-anchored HR zones (per-class %LTHR / %HRR), R1 to R8 recorded; 0005 rows Q198, Q216 moved | the design doc (`discussion`; row 4 open on R8); 0005's Q198 and Q216 point at it |
-| `345db8b` feat(schema): user_hr_anchors, the LTHR and RHR anchor store (migration e7b2a4c9d1f3, HELD for release); SCHEMA.md §051 | the sibling of `user_hrmax`: append-only, dated vs restatement, partial uniques, self-FK, closed provenance; `tests/test_hr_anchors_schema.py` (14) |
-| `b3c252e` feat(hr_zones): per-class zone model, %LTHR for the cycling class and %HRR elsewhere, resolved over dated anchors | `ZoneSpec`, `zone_spec`, `resolve_zone_spec`, `anchor_in_force`, `no_anchor`; `sport_classes.LTHR_SPORTS` + `zone_basis_for`; provenance rows; `tests/test_hr_zones.py` (53) |
-| `d63f531` feat(zones): the fill re-zones every row per class; Polar rows from the Polar Flow trace where it covers them, else vendor zones kept (R2) | `hc_zone_enrich` over every `aerobic_sessions` row, `POLAR_SAMPLE_WRITERS`, `polar_rezoned` / `polar_vendor_fallback` / `by_basis`; the G2 projection script takes anchors; `test_hc_zone_enrich`, `test_hrmax_prompts`, `test_hc_zone_projection` re-aimed and extended |
-| `49575f2` feat(load): metab-v2, the metabolic formula version bumps with the zone model; retired-version rows removed; zoning basis in provenance (R1) | `FORMULA_VERSION_METABOLIC = "metab-v2"`, `RETIRED_METABOLIC_VERSIONS`, `zoning_basis` in each event's provenance |
-| `ab6c8db` feat(api): zone config read, anchor preview and append with the forced choice, per-row zoning on sessions, MCP get_hr_zone_config (R6, R7) | `reads/zone_reads.py`, `hr_anchors.py`, `routers/hr_zones.py`, `AerobicSessionOut.zoning`, the MCP tool, the constant import in `mcp_server`; `tests/test_hr_zones_config.py` |
-| `86db308` feat(settings): Heart rate zones card (bands, anchors, forced choice with bpm preview, Garmin mirror); one provenance line under the WorkoutPanel zone bar | `HRZonesCard.jsx` on Settings, `zoningLine` under `HRZoneBar`; `HRZonesCard.test.jsx` (6), `WorkoutPanel.zoning.test.jsx` (5) |
-| `1d5e4c9` gov(zone-model): DECISIONS_LOG #502 (R1 to R8, rulings rows 1, 2, 3, 5); ROADMAP and BRANCHES rows; GH#634, GH#635 in design 0010; close-out | the governance batch of PR 636 |
-| the post-merge `gov(zone-model-landed)` commit | the BRANCHES row to DONE, the ROADMAP row, the CLAUDE.md pointer, this file (a second PR; it cannot name its own hash) |
+| `89a3154` fix(hr_anchors): the restatement no-op test is on (value, provenance), not value alone; the card previews a same-value re-evidencing | `hr_anchors.plan` takes the provenance and refuses only when both value and provenance match the row it would correct; the preview route passes it; the plan carries `provenance`; the card's preview names a same-value restatement as a re-evidencing (old → new provenance, no band change). Two new pytest cases, one new vitest case. |
+| `b838d6c` ui(hr-zones): R8 is ruled; the card's seed-date helper no longer reads "pending the operator's OK"; the read drops r8_pending | the card's helper text and comment; `zone_reads.zone_config` no longer carries `r8_pending`; the read test asserts its absence; the card test mock drops it. |
+| the `gov(r8)` commit (this file rides it; it cannot name its own hash) | `DECISIONS_LOG` #503 (R8 ruled, one-way, operator) and #504 (ruling: the no-op test on (value, provenance)); design 0010 row 4 resolved and the doc `discussion` → `committed`, §1 R8 reworded, Decisions landed; the BRANCHES row for this branch and the previous row's Outstanding cell; the ROADMAP zone-model row; the CLAUDE.md Recent-landings pointer; this file. |
 
-**Landed and verified.** PR 636 merged at `37bfdbd` (5 Nov 2026, after the operator's `merge`). `deploy-check` run 18 SUCCESS on `37bfdbd`; Railway backend deployment `4cd47a49` and frontend `c9c154c6` both SUCCESS matched on `commitHash`; the backend boot log shows `Running upgrade c4a8e2f6b190 -> e7b2a4c9d1f3`. No prod data write by Code, no recompute run by Code, no `user_hrmax` row written, edited or deleted. `user_hr_anchors` is empty. Tests: backend 4,508 passed locally with one pre-existing failure (`test_current_state` runs `git show 3360ed5:…`, which a shallow clone cannot see; CI checks out full depth), frontend 577 passed.
+**Verified.** Backend `tests/test_hr_zones_config.py` 24 passed and `tests/test_hr_anchors_schema.py` 14 passed locally
+(CI-style env: throwaway Fernet key, `SECRET_KEY`, `ALGORITHM`); frontend `HRZonesCard.test.jsx` 7 passed;
+`scripts/check_governance_placeholders.py` exit 0. The brief's premise was checked live before the guard change: the MCP
+`get_hr_zone_config` read (5 Nov 2026) shows LTHR 158 and RHR 51 seeded, both `observed`, from 2026-03-01, so the
+operator's planned restatement (LTHR 158 @ 2026-03-01 → `device_estimated`) is exactly the same-value case the old guard
+refused. No prod write by Code, no recompute, no anchor row or load data touched, no migration.
 
-Tracker writes this session (outside the tree): GH#634 `build` (Polar per-second sample ingest, the R2 "samples not stored" branch), GH#635 `build` (Garmin per-activity time-in-zone ingest, R5).
+**Merge disposition.** The one-way content of R8 (the seed-date default) landed on master in PR 636; this PR records the
+operator's explicit ruling and carries the two-way guard fix, so it self-merges on green under § Merge disposition. The
+merge SHA and the deploy check (#491, both services: `backend/` and `frontend/` changed) are reported in the session's
+final message, not here (this file is written before the merge).
 
 ## Pending-queue reconciliation
 
-No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief `Zone Model Build - Echo Bike Zones Review`; each step against where it landed:
+No `PENDING` item came in from a `;cc` chat close-out. The session was driven by the pasted brief
+`R8 Ruling Record - Echo Bike Zones Review`; each step against where it landed:
 
-- **VERIFY** — every assertion held on master `66d69d3` (recorded in 0010's Context and #502's How-you-know). One nuance, not a mismatch: `hr_zone_config_snapshots` (SCHEMA §050) holds Garmin's LTHR / RHR as capture-only observation; nothing zoned from it and the operator cannot write it, so it is not an anchor store. It is now the Garmin mirror strip's input.
-- **Step 1 consumer map** — in 0010's Context (writer / load / arbitration / report / display per use). The `mcp_server` literal `"metab-v1"` was a hidden consumer; it now imports the constant.
-- **Step 2 classifier** — `backend/sport_classes.py` held two static sets (non-training, strength) and no cycling class; nothing else classifies sports except phase-scoped `device_sports`. `LTHR_SPORTS` added there under the same Q164 rule.
-- **Step 3 Polar samples** — NOT stored (`hr_samples`: `health_connect` and `garmin` only). R2's fallback branch taken, GH#634 filed; and the "samples exist" read taken through the `fi.polar.polarflow` Health Connect trace (0010 row 1, a two-way ruling with its reverse-by in #502).
-- **Step 4 design doc** — `docs/design/0010-threshold-anchored-hr-zones.md`, `discussion`.
-- **Step 5 a–i** — all built, in the commits above. 5d "recompute wired to run after release": the existing chain (Training-page open, 02:00) plus the card forcing `POST /load/refresh?force=true` after each append.
-- **R8** — pending the operator's OK; shipped as the card's editable default date, flagged in the card (`r8-note`), the read (`r8_pending`) and #502.
-- **Gates** — no VERIFY mismatch; the migration and the recompute wait for the operator; the PR holds.
-- **Not asked for, done anyway, two-way:** the G2 projection script (`arbitration_flip_report.py --hc-zones`) now resolves the per-class spec (DB anchors; `--lthr` / `--rhr` in CSV mode) so it still projects what the fill writes.
-- **Provisional:** nothing. Everything decided is committed. The entry number #502 is provisional in one sense only: it was claimed at master max #501 and must be re-resolved if master advances before the release.
+- **ANCHOR** — master HEAD `28181dc` as stated; verified before any edit.
+- **Close row 4 of design 0010** — DONE (the `gov(r8)` commit): status `resolved: the operator ruled YES, 2026-11-05 (no
+  earlier threshold data); #503`.
+- **Move the doc state if no other rows are open** — DONE: `discussion` → `committed`. The brief says "accepted"; the
+  state vocabulary in `CLAUDE.md` is ideation / discussion / committed / abandoned, and `CLAUDE.md` wins, so `committed`.
+  Row 6 is a filed `build` pointer (GH#634), not an open question, so nothing else held the doc.
+- **Remove the "pending the operator's OK" wording from the card** — DONE (`b838d6c`), with the `r8_pending` flag on the
+  read removed in the same commit (the same pending status, one surface further back). The `r8-note` test id and the
+  "R8" mention stay: the note still tells the operator where the default comes from.
+- **GUARD: no change to anchor rows or load data** — held: nothing in this PR writes `user_hr_anchors`, `aerobic_sessions`
+  or `load_events`; no migration.
+- **Decision number resolved at merge** — #503 and #504 resolved against master max #502 at `28181dc`; re-resolve if
+  master advances before the merge (the strict-mode pause, § Merge path).
+- **One gov(...) commit; UI copy in its own commit** — as laid out above (three commits: fix, ui, gov).
+- **ADDITIONAL STEP: the restatement guard on (value, provenance)** — DONE (`89a3154`, ruling #504). The brief says "in
+  the API and the card"; the card was verified to carry no guard of its own (it relays the API's 400), so the API change
+  is the whole fix and the card's change is the preview line that makes a same-value re-evidencing legible.
+- **After it lands, the operator restates LTHR 158 @ 2026-03-01 as `device_estimated`** — OWED (operator), after the
+  deploy check; recorded in the BRANCHES and ROADMAP rows.
+- **Provisional:** nothing. Everything decided is committed; the merge and the deploy check follow in-turn.
 
 ## Cold-resume handoff
 
-**Current sprint (ROADMAP NOW).** Zone model: DONE (merged `37bfdbd`, deployed, migration applied); the anchors are not yet seeded, so the metabolic series is empty until the operator does. Ledger UX follow-ups (GH#622 to GH#629): PR-A and the ruling landed 5 Nov; the rest UNSTARTED. Coach ledger writes (GH#612 to GH#617): UNSTARTED. Injury lifecycle in-app (design 0009): branches landed; its remaining rows unchanged. Wake-day capture: DONE, three-morning gate OWED. The other NOW rows are OWED to the operator or Code as their cells say and did not move.
+**Current sprint (ROADMAP NOW).** Zone model: DONE and seeded; R8 ruled (#503); the restatement guard fixed (#504); OWED
+(operator): the LTHR restatement to `device_estimated` and an Echo bike Z2 ride read on its card; OWED (Code): the first
+chain report's `polar_rezoned` / `polar_vendor_fallback` counts. Ledger UX follow-ups (GH#622 to GH#629): PR-A and the
+ruling landed 5 Nov; the rest UNSTARTED. Coach ledger writes (GH#612 to GH#617): UNSTARTED. Injury lifecycle in-app
+(design 0009): branches landed; its remaining rows unchanged. Wake-day capture: DONE, three-morning gate OWED. The other
+NOW rows are OWED to the operator or Code as their cells say and did not move.
 
-**v1 triage of NOW.** Zone model — See (a Z2 ride reads and deposits as Z2) and Know (the conditioning quota counts load the device agrees with). Ledger UX, coach ledger writes, injury lifecycle — Know and Walk in. Wake-day capture and lane visibility — Loop. Missed-PM catch-up, data freshness, plan/schedule tools — Loop / See, DONE and riding for their owed checks. RPE fallback (Q231) — See, OWED (Code once the gate opens). Source hierarchy (#365) and the Polar relabel limbs — OWED (Luke), serving See / Know; neither moved this session and neither is a demotion candidate: each waits on a named operator act.
+**v1 triage of NOW.** Zone model — See (a Z2 ride reads and deposits as Z2) and Know (the conditioning quota counts load
+the device agrees with). Ledger UX, coach ledger writes, injury lifecycle — Know and Walk in. Wake-day capture and lane
+visibility — Loop. Missed-PM catch-up, data freshness, plan/schedule tools — Loop / See, DONE and riding for their owed
+checks. RPE fallback (Q231) — See, OWED (Code once the gate opens). Source hierarchy (#365) and the Polar relabel limbs —
+OWED (Luke), serving See / Know; neither moved this session and neither is a demotion candidate: each waits on a named
+operator act.
 
 **Open `fork` issues.** None.
 
-**Design docs not in a terminal state.** 0001, 0002, 0004, 0005 (Q213 still open; Q198 and Q216 moved to 0010), 0006, 0007, 0008, 0009, 0010 (`discussion`: row 4, R8, awaits the operator's OK). 0000 is the template.
+**Design docs not in a terminal state.** 0001, 0002, 0004, 0005 (Q213 still open), 0006, 0007, 0008, 0009. 0010 is now
+`committed` (this session). 0000 is the template.
 
-**Not touched this session (named so it is not read as finished).** No feature work outside the zone model: the ledger UX defects GH#623 to GH#629 and the coach ledger writes GH#612 to GH#617 stood still; the RPE fallback (Q231), the source hierarchy ruling (#365), the Polar relabel limbs, the appointment reconcile leg, the three-morning wake-day gate, the single-row HC bout deposit read (#384 item 4) — all unchanged, all gated on the operator acts their rows name. GH#634 and GH#635 are new `build` issues; neither is started. No companion-app (`health-connect-app`) work. No CLAUDE.md change: nothing landed on master this session, so the Recent-landings block is unchanged (the pointer belongs to the release session).
+**Branch gate.** `origin` holds `master` and `claude/eloquent-bardeen-lk9soc` only (the latter `+2` by `git cherry`
+before the gov commit; rowed DONE in `BRANCHES.md` against PR GH#638, self-merged in-turn, branch deleted at merge). No
+`BRANCHES.md` row carries OWED or BLOCKED status, so the Q138 sweep for landed-but-unflipped rows is empty.
 
-**The single clearest next action (operator).** Seed the anchors, through Settings → Heart rate zones: LTHR 158 `device_estimated` (Garmin auto-detect; reads "retest") and RHR 51 `stated`, each as a dated change on the R8 default date (the earliest session date) or a date of their choosing; each Save forces the chain. Then read `GET /hr-zones/config` (or the MCP `get_hr_zone_config`) and the first chain report's `polar_rezoned` / `polar_vendor_fallback` counts, and open an Echo bike Z2 ride on its card: its provenance line should read "Zoned on %LTHR (cycling class) · LTHR 158 bpm" and its bar should be Z2. Until the anchors are seeded, every row is `no_anchor` and the `metab-v2` series is empty, not wrong.
+**Not touched this session (named so it is not read as finished).** This was a governance-and-one-fix session: no feature
+work. The ledger UX defects GH#623 to GH#629 and the coach ledger writes GH#612 to GH#617 stood still; the RPE fallback
+(Q231), the source hierarchy ruling (#365), the Polar relabel limbs, the appointment reconcile leg, the three-morning
+wake-day gate, the single-row HC bout deposit read (#384 item 4), GH#634 (Polar sample ingest) and GH#635 (Garmin
+time-in-zone cross-check) — all unchanged, all gated on the operator acts or capacity their rows name. The first chain
+report after the seed (`polar_rezoned` / `polar_vendor_fallback`) has still not been read by Code: it needs the prod
+container (`railway ssh`), which this cloud session does not have. Two consecutive sessions on the zone model have now
+gone to the model and its governance; the instrumented thing — a Z2 ride on the Echo bike reading as Z2 on its card —
+is still an operator read that has not been reported back. No companion-app (`health-connect-app`) work.
 
-**Second action (operator).** Rule R8 (0010 row 4): if OK, the card's default date becomes the rule; if not, say what the seed date should be.
+**The single clearest next action (operator).** Once GH#638's deploy check is green on both services: Settings → Heart
+rate zones, LTHR, 158 bpm, date 2026-03-01, provenance device-estimated, change = Restatement, rationale naming the
+Garmin auto-detect; the preview should read "0 sessions re-zone · restates the 158 bpm entry (observed)" with the
+re-evidencing line "observed → device_estimated"; Save. The LTHR line then reads `device_estimated` with the retest flag,
+on the card and in the MCP `get_hr_zone_config` read. Then open an Echo bike Z2 ride on its card and report what the
+provenance line and the bar show.
+
+**Second action (Code, next session with prod access).** Read the first chain report's `polar_rezoned` /
+`polar_vendor_fallback` counts and record them against #502.

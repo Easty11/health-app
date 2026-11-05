@@ -1,5 +1,5 @@
 # 0010 — Threshold-anchored HR zones (per sport class: %LTHR for cycling, %HRR elsewhere)
-**State:** discussion
+**State:** committed
 **Owner:** Code   **Opened:** 2026-11-05   **Last moved:** 2026-11-05
 
 ## Context
@@ -89,9 +89,13 @@ CHECK restates_id IS NULL OR rationale IS NOT NULL;
 - **R3.** RHR is this stored, dated anchor, never the live daily Garmin RHR (`daily_physiology.resting_hr_bpm`,
   `health_connect_syncs.hr_nadir_bpm`) and never `hr_zone_config_snapshots.rhr_7d_auto_bpm`. A fitness-driven RHR
   change is a dated change the operator records.
-- **R8 (pending operator OK).** Seeded anchors take `effective_from` = the user's earliest `aerobic_sessions`
-  date (best current estimate) with the provenance above. Shipped as the card's DEFAULT date for a kind that has no
-  entry yet; the field stays editable (seed dates configurable), and the card says the default is R8's.
+- **R8 (ruled YES by the operator, 2026-11-05; #503).** Seeded anchors take `effective_from` = the user's earliest
+  `aerobic_sessions` date (best current estimate; there is no earlier threshold data) with the provenance above.
+  Shipped as the card's DEFAULT date for a kind that has no entry yet; the field stays editable (seed dates
+  configurable), and the card says the default is R8's.
+- **Restatement no-op test (#504, ruling).** A restatement is refused as a no-op only when both the value and the
+  provenance match the row it corrects; the same value under a new provenance is a real restatement, because
+  provenance drives the retest flag.
 
 ### 2. Sport → basis map (R4)
 
@@ -224,10 +228,12 @@ default) and the provenance line (vitest).
 | 1 | Do a Polar row's zones come from the `fi.polar.polarflow` Health Connect samples of the same bout (R2 "samples exist" read through the HC twin)? | Yes: `POLAR_SAMPLE_WRITERS = ("fi.polar.polarflow",)`; a Polar row those samples cover is re-zoned, else vendor zones stay. | `tests/test_hc_zone_enrich.py` Polar branch; `polar_rezoned` / `polar_vendor_fallback` in the chain report on prod after release | two-way (reverse-by: empty tuple → pure vendor fallback) | resolved in-PR (ruling, #502) |
 | 2 | Does the LTHR z1 have a floor? | No: Friel z1 is "< 81 %" and Garmin's cycling profile states no floor; a sample below it is z1 time. | the brief's band table; `test_hr_zones.py` edge tests | two-way (reverse-by: `LTHR_Z1_FLOOR_PCT`) | resolved in-PR (ruling, #502) |
 | 3 | Do rowing / elliptical / cross-trainer ergs join the LTHR class? | No: the LTHR anchor is a cycling threshold; they zone on %HRR. | the operator's Garmin profile (LTHR on cycling only); `sport_classes.LTHR_SPORTS` | two-way (reverse-by: add the name) | resolved in-PR (ruling, #502) |
-| 4 | R8: seeded anchors take `effective_from` = earliest session date? | Yes, shipped as the card's default date, editable. | the operator's OK | one-way (shapes stored rows' meaning) | open (pending operator OK) |
+| 4 | R8: seeded anchors take `effective_from` = earliest session date? | Yes, shipped as the card's default date, editable. | the operator's OK | one-way (shapes stored rows' meaning) | resolved: the operator ruled YES, 2026-11-05 (no earlier threshold data); #503 |
 | 5 | Does the card become a writer of `user_hrmax`? | No: the script stays the one writer; the card shows HRmax and names the script. | `tests/test_hr_zones_schema.py::test_only_the_operator_script_writes_user_hrmax` | two-way | resolved in-PR (ruling, #502) |
 | 6 | Native Polar per-second sample ingest (AccessLink `samples`)? | Build issue; the rows before 30 Jun 2026 and any bout without an HC copy stay vendor until it lands. | the `build` issue's live probe of the `samples` feature | — | filed (GH#634, `build`) |
 
 ## Decisions landed
 
 - #502 — the model, R1 to R8 recorded; rows 1, 2, 3, 5 as rulings under the same entry (number resolved at master max #501; re-resolve if master advances before the release lands).
+- #503 — R8 ruled YES (row 4 resolved, 2026-11-05); the last open row, so this doc moved `discussion` → `committed`.
+- #504 — ruling: the anchor restatement no-op test is on (value, provenance), not value alone.
