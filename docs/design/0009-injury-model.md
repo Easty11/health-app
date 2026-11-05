@@ -1,6 +1,6 @@
 # 0009 — Injury model
 **State:** discussion
-**Owner:** Luke   **Opened:** 2026-11-04   **Last moved:** 2026-11-04
+**Owner:** Luke   **Opened:** 2026-11-04   **Last moved:** 2026-11-05
 
 ## Context
 
@@ -102,8 +102,9 @@ drift from what the engine enforces, the failure #340 already names.
 | 7 | Red-flag class | its own type or a `signal_type`; one output (escalate) | operator + clinician wording | one-way (clinical) | open |
 | 8 | Per-session pain capture | the PM close-out's pain reason code | 0002 | owed to 0002 | open |
 | 9 | Overuse weekly capture (OSTRC-style) | a weekly four-item prompt on a chosen day | operator ruling on cadence | two-way | open |
-| 10 | Coach proposals from clinical documents | yes, proposal-gated, clinician authority pre-selected | the operator's fork ruling (GH#608, filed by PR-D) | one-way | open |
+| 10 | Coach proposals from clinical documents | yes, proposal-gated; authority chosen by the operator at confirm, never pre-selected (the pre-selected default was not taken) | the operator's fork ruling (GH#608, filed by PR-D) | one-way | resolved → #501 |
 
 ## Decisions landed
 
 - #493 — The injury row has a closed shape: a body-part vocabulary, side and signal enums, the seven optional injury-model fields admitted (enum- or existence-checked, read by nothing yet), and no new `restrictions[]` (resolves row 1).
+- #501 — Coach proposals from clinical material are allowed, proposal-gated; authority is chosen at confirm, never pre-selected; the coach never supersedes an operator-written row (resolves row 10; R2 and R3 built, R1 ruled with nothing built).
