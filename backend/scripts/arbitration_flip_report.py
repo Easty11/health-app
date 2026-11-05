@@ -59,7 +59,8 @@ from typing import Any, Iterable, Optional
 from sqlalchemy import text
 
 import models
-from hr_zones import MIN_ZONE_COVERAGE, entry_from_row, hrmax_in_force, zone_session
+from hr_zones import MIN_ZONE_COVERAGE, entry_from_row, hrmax_in_force, resolve_zone_spec, zone_session
+from sport_classes import zone_basis_for
 from load_events_metabolic import compute_metabolic_load
 from reads import aerobic_reads
 
@@ -303,9 +304,15 @@ def _clone(s) -> "models.AerobicSession":
 
 
 def project_hc_zones(rows: list, samples: SampleIndex, hrmax: dict[int, list[tuple[date, int]]],
-                     *, timestamps_only: bool = False) -> tuple[list[dict[str, Any]], list]:
+                     *, anchors: Optional[dict[int, dict[str, list]]] = None,
+                     timestamps_only: bool = False) -> tuple[list[dict[str, Any]], list]:
     """Project `hc_zone_enrich` over ONE user-set of rows, in memory. Returns (per-HC-row records,
-    the row set AFTER projection: transient clones, HC rows carrying the projected zones or NULL)."""
+    the row set AFTER projection: transient clones, HC rows carrying the projected zones or NULL).
+
+    Per-class model (design 0010): the basis is the row's sport class, the spec its anchors in force —
+    `hrmax` per user as before, `anchors` per user `{"lthr": [...], "rhr": [...]}` (resolver entries).
+    Polar rows are NOT projected here (the G2 report compares them as Polar zoned them)."""
+    anchors = anchors or {}
     after = [_clone(s) for s in rows]
     records: list[dict[str, Any]] = []
     for s in after:
@@ -319,15 +326,20 @@ def project_hc_zones(rows: list, samples: SampleIndex, hrmax: dict[int, list[tup
             records.append({**base, "reason": "no_interval", "coverage": None, "zones": None,
                             "hr_avg": None, "hr_max": None, "over_ceiling": False, "near": False})
             continue
-        in_force = hrmax_in_force(hrmax.get(s.user_id, []), s.session_date)
+        ua = anchors.get(s.user_id, {})
+        spec = resolve_zone_spec(zone_basis_for(s.sport_name), s.session_date,
+                                 hrmax_entries=hrmax.get(s.user_id, []), lthr_entries=ua.get("lthr", []),
+                                 rhr_entries=ua.get("rhr", []))
+        in_force = spec.hrmax if spec is not None else None
         window = (samples.window(s.user_id, s.source_package or "unknown", start, stop)
-                  if in_force is not None else [])
-        res = zone_session(window, start, stop, in_force)
+                  if spec is not None else [])
+        res = zone_session(window, start, stop, spec)
         z = res.zones
         s.z1_seconds, s.z2_seconds, s.z3_seconds, s.z4_seconds, s.z5_seconds = z if z else (None,) * 5
         s.hr_avg, s.hr_max = (res.hr_avg, res.hr_max) if z else (None, None)
         records.append({**base, "reason": res.reason, "coverage": res.coverage,
                         "zones": None if timestamps_only else z, "hrmax": in_force,
+                        "basis": spec.basis if spec is not None else None,
                         "hr_avg": None if timestamps_only else res.hr_avg,
                         "hr_max": None if timestamps_only else res.hr_max,
                         "over_ceiling": res.over_ceiling and not timestamps_only,
@@ -446,12 +458,13 @@ def render_hc_zone_report(records, flips, deltas, twins, *, timestamps_only: boo
     return "\n".join(L)
 
 
-def hc_zone_report_from_rows(rows: list, samples: SampleIndex, hrmax: dict, *, timestamps_only: bool = False) -> str:
+def hc_zone_report_from_rows(rows: list, samples: SampleIndex, hrmax: dict, *, anchors: Optional[dict] = None,
+                             timestamps_only: bool = False) -> str:
     """The whole G2 report for ONE user's full session set."""
     before = [_clone(s) for s in rows]
     try:
-        records, after = project_hc_zones(rows, samples, hrmax, timestamps_only=timestamps_only)
-    except ValueError as exc:       # `hrmax_in_force` refuses an ambiguous or incoherent entry set
+        records, after = project_hc_zones(rows, samples, hrmax, anchors=anchors, timestamps_only=timestamps_only)
+    except ValueError as exc:       # `anchor_in_force` refuses an ambiguous or incoherent entry set
         raise SystemExit(f"HRmax entries cannot be resolved: {exc}")
     return render_hc_zone_report(records, canonical_flips(before, after), trimp_delta(before, after),
                                  [] if timestamps_only else polar_twin_comparison(after, records),
@@ -462,6 +475,7 @@ def _hc_zones_main(args) -> int:
     """`--hc-zones`: the G2 projection. DB mode reads `hr_samples` + `user_hrmax` (post-deploy); CSV
     mode reads exports (`--csv` aerobic_sessions plus `--samples-csv` or `--record-sources-csv`)."""
     extra = parse_hrmax_args(args.hrmax or [])
+    extra_anchors = {"lthr": parse_hrmax_args(args.lthr or []), "rhr": parse_hrmax_args(args.rhr or [])}
     timestamps_only = bool(args.record_sources_csv)
     if args.csv:
         by_user = rows_from_csv(args.csv)
@@ -470,6 +484,11 @@ def _hc_zones_main(args) -> int:
         samples = (samples_from_record_sources_csv(args.record_sources_csv) if timestamps_only
                    else samples_from_csv(args.samples_csv))
         hrmax = {u: list(v) for u, v in extra.items()}
+        anchors: dict[int, dict[str, list]] = defaultdict(lambda: {"lthr": [], "rhr": []})
+        for kind, per_user in extra_anchors.items():
+            for u, v in per_user.items():
+                anchors[u][kind].extend(v)
+        anchors = dict(anchors)
     else:
         from database import SessionLocal
         db = SessionLocal()
@@ -487,9 +506,10 @@ def _hc_zones_main(args) -> int:
                            for h in db.query(models.HrSample).filter(
                                models.HrSample.source == aerobic_reads.HEALTH_CONNECT).all()]
                 stored = db.query(models.UserHrmax).all()
+                stored_anchors = db.query(models.UserHrAnchor).all()
             except Exception as exc:  # noqa: BLE001
-                raise SystemExit(f"hr_samples / user_hrmax unreadable ({type(exc).__name__}): the migration has not run "
-                                 "here. Pre-merge, use CSV mode with --record-sources-csv.")
+                raise SystemExit(f"hr_samples / user_hrmax / user_hr_anchors unreadable ({type(exc).__name__}): the "
+                                 "migration has not run here. Pre-merge, use CSV mode with --record-sources-csv.")
             samples = SampleIndex(triples)
             hrmax = defaultdict(list)
             for h in stored:
@@ -497,10 +517,17 @@ def _hc_zones_main(args) -> int:
             for u, v in extra.items():
                 hrmax[u].extend(v)
             hrmax = dict(hrmax)
+            anchors = defaultdict(lambda: {"lthr": [], "rhr": []})
+            for a in stored_anchors:
+                anchors[a.user_id][a.kind].append(entry_from_row(a))
+            for kind, per_user in extra_anchors.items():
+                for u, v in per_user.items():
+                    anchors[u][kind].extend(v)
+            anchors = dict(anchors)
             reports = []
             for uid, rows in sorted(by_user.items()):
                 if any(s.source == aerobic_reads.HEALTH_CONNECT for s in rows):
-                    reports.append(f"## user {uid}\n\n" + hc_zone_report_from_rows(rows, samples, hrmax))
+                    reports.append(f"## user {uid}\n\n" + hc_zone_report_from_rows(rows, samples, hrmax, anchors=anchors))
             db.rollback()                       # nothing was written; end the read transaction
             print("\n\n".join(reports) if reports else "No health_connect rows.")
             return 0
@@ -508,7 +535,8 @@ def _hc_zones_main(args) -> int:
             db.close()
     if args.user is not None:
         by_user = {u: r for u, r in by_user.items() if u == args.user}
-    reports = [f"## user {uid}\n\n" + hc_zone_report_from_rows(rows, samples, hrmax, timestamps_only=timestamps_only)
+    reports = [f"## user {uid}\n\n" + hc_zone_report_from_rows(rows, samples, hrmax, anchors=anchors,
+                                                                timestamps_only=timestamps_only)
                for uid, rows in sorted(by_user.items())
                if any(s.source == aerobic_reads.HEALTH_CONNECT for s in rows)]
     print("\n\n".join(reports) if reports else "No health_connect rows.")
@@ -527,6 +555,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="HR timestamps export, pre-merge (coverage/reason only; with --hc-zones --csv)")
     ap.add_argument("--hrmax", action="append", default=None, metavar="USER=BPM@YYYY-MM-DD",
                     help="HRmax entry (repeatable); CSV mode's only source, added to user_hrmax in DB mode")
+    ap.add_argument("--lthr", action="append", default=None, metavar="USER=BPM@YYYY-MM-DD",
+                    help="LTHR anchor entry (repeatable; the cycling class, design 0010); added to user_hr_anchors in DB mode")
+    ap.add_argument("--rhr", action="append", default=None, metavar="USER=BPM@YYYY-MM-DD",
+                    help="resting-HR anchor entry (repeatable; every other sport); added to user_hr_anchors in DB mode")
     args = ap.parse_args(argv)
 
     if args.hc_zones:
