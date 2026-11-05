@@ -45,10 +45,17 @@
 // them too (DECISIONS_LOG "Proposals and reviews due render on the AM check-in saved screen"); this
 // page imports them and its behaviour is unchanged.
 
+// GH#622 additions: each card also lists the CONFIRMED constraints and open / confirmed findings
+// parented to it (GET /knowledge/confirmed — what the engine and the coach read), each with Resolve
+// available at any time through the same retire route and basis form the review sweep uses. Confirmed
+// rows whose parent is not an active injury (no parent, or a resolved one) are listed under "Attached
+// to no active injury", so no confirmed row is unreachable before its review date. The sweep itself is
+// unchanged: a due row still appears in "Review due" with Resolve and Keep.
+
 import { useEffect, useState } from 'react'
 import HubLayout from '../components/HubLayout'
 import InjurySweep from '../components/InjurySweep'
-import { BASIS_MIN, Chip, ProposalList, ReviewDue, errorText, titleCase } from '../components/InjuryActions'
+import { BASIS_MIN, Chip, ConfirmedList, ProposalList, ReviewDue, errorText, titleCase } from '../components/InjuryActions'
 import api from '../api'
 import {
   INJURY_BODY_PARTS, INJURY_COURSES, INJURY_DIAGNOSIS_STATUSES, INJURY_SIDES, INJURY_SIGNAL_TYPES,
@@ -356,7 +363,7 @@ function InjuryEditForm({ row, onSaved, onCancel }) {
 
 // --- active row --------------------------------------------------------------------------------
 
-function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
+function ActiveRow({ row, onRecord, onDone, onResolved, proposals, confirmed }) {
   const value = row.value || {}
   const key = sorenessKey(value)
   const [editing, setEditing] = useState(false)
@@ -453,6 +460,8 @@ function ActiveRow({ row, onRecord, onDone, onResolved, proposals }) {
 
       <ProposalList items={proposals} onDone={onDone} />
 
+      <ConfirmedList items={confirmed} onDone={onDone} />
+
       {editing && (
         <InjuryEditForm row={row} onSaved={() => { setEditing(false); onDone() }} onCancel={() => setEditing(false)} />
       )}
@@ -540,6 +549,8 @@ export default function Injuries() {
   const [proposalError, setProposalError] = useState('')
   const [due, setDue] = useState({ items: [], withheld_labs: 0 })
   const [dueError, setDueError] = useState('')
+  const [confirmed, setConfirmed] = useState([])
+  const [confirmedError, setConfirmedError] = useState('')
 
   function load() {
     // ONE injuries request. include_resolved=true always — the toggle only controls display.
@@ -560,6 +571,13 @@ export default function Injuries() {
         setDueError('')
       })
       .catch(() => setDueError('Could not load the review sweep.'))
+    // The rows in force are their own resource too (GH#622); a failure here never hides the ledger.
+    api.get('/knowledge/confirmed')
+      .then(({ data }) => {
+        setConfirmed(Array.isArray(data) ? data.filter((r) => r.type === 'constraint' || r.type === 'finding') : [])
+        setConfirmedError('')
+      })
+      .catch(() => setConfirmedError('Could not load the confirmed constraints and findings.'))
   }
 
   useEffect(() => { load() }, [])
@@ -590,6 +608,9 @@ export default function Injuries() {
   const activeKeys = new Set(all.filter((r) => r.active).map((r) => r.key))
   const proposalsFor = (key) => proposals.filter((p) => p.value?.parent_key === key)
   const otherProposals = proposals.filter((p) => !activeKeys.has(p.value?.parent_key))
+  // Confirmed rows the same way: under their ACTIVE parent, else in the unattached section (GH#622).
+  const confirmedFor = (key) => confirmed.filter((r) => r.value?.parent_key === key)
+  const otherConfirmed = confirmed.filter((r) => !activeKeys.has(r.value?.parent_key))
 
   const history = all
     .filter((r) => !r.active)
@@ -618,7 +639,7 @@ export default function Injuries() {
 
         {active.map(({ row, onRecord }) => (
           <ActiveRow key={row.id} row={row} onRecord={onRecord} onDone={load} onResolved={runSweep}
-            proposals={proposalsFor(row.key)} />
+            proposals={proposalsFor(row.key)} confirmed={confirmedFor(row.key)} />
         ))}
 
         {proposalError && <p className="text-xs text-red-600">{proposalError}</p>}
@@ -626,6 +647,14 @@ export default function Injuries() {
           <section aria-label="Other proposals" className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
             <p className="text-xs text-gray-500">Not attached to an active injury</p>
             <ProposalList items={otherProposals} onDone={load} />
+          </section>
+        )}
+
+        {confirmedError && <p className="text-xs text-red-600">{confirmedError}</p>}
+        {otherConfirmed.length > 0 && (
+          <section aria-label="Attached to no active injury" className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+            <p className="text-xs text-gray-500">Attached to no active injury</p>
+            <ConfirmedList items={otherConfirmed} onDone={load} />
           </section>
         )}
 

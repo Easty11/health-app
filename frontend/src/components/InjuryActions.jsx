@@ -368,6 +368,23 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// The ONE retire route per type — the resolve route for a constraint, retract for a finding — shared
+// by the due row and the confirmed row (GH#622), so "Resolve" cannot mean two things.
+function retireUrl(type, id) {
+  return type === 'finding' ? `/knowledge/findings/${id}/retract` : `/knowledge/constraints/${id}/resolve`
+}
+
+async function retire(type, id, body, onDone) {
+  try {
+    await api.post(retireUrl(type, id), body)
+    onDone()
+    return null
+  } catch (err) {
+    if (err?.response?.status === 409) onDone()
+    return errorText(err, 'Could not resolve. Try again.')
+  }
+}
+
 function DueItem({ item, onDone }) {
   const [mode, setMode] = useState(null)        // null | 'resolve' | 'keep'
   const [date, setDate] = useState('')
@@ -375,17 +392,7 @@ function DueItem({ item, onDone }) {
   const [error, setError] = useState('')
   const route = item.type === 'finding' ? 'findings' : 'constraints'
 
-  async function resolve(body) {
-    try {
-      await api.post(item.type === 'finding' ? `/knowledge/findings/${item.id}/retract`
-        : `/knowledge/constraints/${item.id}/resolve`, body)
-      onDone()
-      return null
-    } catch (err) {
-      if (err?.response?.status === 409) onDone()
-      return errorText(err, 'Could not resolve. Try again.')
-    }
-  }
+  const resolve = (body) => retire(item.type, item.id, body, onDone)
 
   async function keep() {
     if (!date || date <= todayISO() || busy) return
@@ -470,5 +477,57 @@ function ReviewDue({ items, withheldLabs, onDone }) {
   )
 }
 
+// --- confirmed rows — in force, resolvable at any time (GH#622) ---------------------------------
+//
+// What the engine and the coach read: a CONFIRMED constraint, or an open / confirmed finding, from
+// GET /knowledge/confirmed. Each shows its kind, scope, exit, review date and who set it, and carries
+// ONE action — Resolve, through the same retire route and BasisForm the due row uses (basis and an
+// authority required, nothing defaulted). Keep is not here: re-dating belongs to the review sweep,
+// which lists a row once it is due. SURFACING ONLY (#223): nothing lifts by itself.
 
-export { BASIS_MIN, BasisForm, CONSTRAINT_KINDS, CONSTRAINT_SIDES, Chip, DueItem, ProposalEditForm, ProposalItem, ProposalList, ReviewDue, errorText, proposalText, titleCase, todayISO }
+const SET_BY = { user: 'set by you', clinician: 'set by your clinician', engine: 'set by the engine' }
+
+function ConfirmedItem({ row, onDone }) {
+  const [resolving, setResolving] = useState(false)
+  const v = row.value || {}
+  const setBy = SET_BY[v.asserted_by] || (v.asserted_by ? `set by ${v.asserted_by}` : 'no authority recorded')
+  const status = v.status === 'open' ? 'open' : 'confirmed'
+
+  return (
+    <li className="rounded-lg border border-indigo-200 bg-indigo-50/40 px-3 py-2 space-y-2">
+      <p className="text-xs text-gray-800">
+        <Chip tone="indigo">{status} {row.type}</Chip>{' '}{proposalText(row)}
+      </p>
+      <p className="text-[11px] text-gray-500">
+        {setBy}
+        {v.confirmed_on ? ` · confirmed ${v.confirmed_on}` : ''}
+        {v.parent_key ? ` · re: ${v.parent_key}` : ''}
+        {' · '}<code className="font-mono">{row.key}</code>
+      </p>
+      {!resolving && (
+        <button type="button" onClick={() => setResolving(true)}
+          className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800">Resolve…</button>
+      )}
+      {resolving && (
+        <BasisForm prompt="Basis — why is this no longer needed?" submitLabel="Confirm resolution"
+          busyLabel="Resolving…" onSubmit={(body) => retire(row.type, row.id, body, onDone)}
+          onCancel={() => setResolving(false)} />
+      )}
+    </li>
+  )
+}
+
+function ConfirmedList({ items, onDone }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] uppercase tracking-wide text-indigo-700">In force</p>
+      <ul className="space-y-2">
+        {items.map((r) => <ConfirmedItem key={`${r.type}-${r.id}`} row={r} onDone={onDone} />)}
+      </ul>
+    </div>
+  )
+}
+
+
+export { BASIS_MIN, BasisForm, CONSTRAINT_KINDS, CONSTRAINT_SIDES, Chip, ConfirmedItem, ConfirmedList, DueItem, ProposalEditForm, ProposalItem, ProposalList, ReviewDue, errorText, proposalText, retireUrl, titleCase, todayISO }
