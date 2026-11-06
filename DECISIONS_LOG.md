@@ -15759,3 +15759,11 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Decision.** Resolved in-PR (two-way; operator ruling R2, 2026-11-06), PR GH#642. `directHeartRate` by `directTimestamp` from `/activity-service/activity/{id}/details` (positions resolved from `metricDescriptors` by key, null bpm skipped) is stored in `hr_samples` as `garmin` / `activity_details`, separate from the `garmin` / `personal_api` wellness lane, one details call per uncaptured activity (the selfeval lane, up to 10 a night; the operator backfill from 2026-03-01). `hc_zone_enrich.sample_writers_for` adds it for a `health_connect` row written by `com.garmin.android.apps.connectmobile`, the densest stream per bout zoned from alone (#506's rule); no other row type reads it, the wellness lane is never read for a session, INV-7 unchanged. The details call asks `maxChartSize=100000` and no polyline, retries once without them on HTTP 400, and reports thinning and the effective interval rather than assuming full resolution (the probe could not show it).
 
 **Reverse-by.** Remove `GARMIN_ACTIVITY_WRITER` from `sample_writers_for`; the rows fall back to the HC trace on the next chain run (the samples stay, harmless).
+
+### #509. An unexplained empty Garmin activity stream is retried, never recorded as "no HR"
+
+**Tier:** ruling
+
+**Decision.** Resolved in-PR (two-way), 2026-11-06, refining #508's capture after the operator's dry runs (5 activities: 0 samples, no reason in the counts; 104 activities: 24 with HR, 25,778 samples, median interval 1.0 s, 11 thinned, 80 empty). `garmin_activity_metrics.StreamParse.conclusive` closes a stream only for samples found, no details (404, empty body, `detailsAvailable` false, or no rows with `totalMetricsCount` 0) or rows with no HR column; an HR column of nulls, or no rows while Garmin reports rows, stays unmarked (`stream_unmarked`) and is retried. The backfill counts empty streams by reason and gains `--diagnose` (payload shape only, asked and bare).
+
+**Reverse-by.** Return `conclusive` to always true: every fetched stream is closed on first read, as #508 shipped.
