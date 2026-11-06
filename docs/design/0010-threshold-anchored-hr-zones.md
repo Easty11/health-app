@@ -192,7 +192,7 @@ runs against prod before the operator releases the migration (GUARD).
 - **MCP (R7):** `get_hr_zone_config` — the same read, formatted; read-only.
 - **MCP coverage read:** `get_zone_coverage(days?)` — how every raw `aerobic_sessions` row is zoned now, per source
   (`lthr` / `hrr` / `vendor` = `polar_vendor_fallback` / `no_anchor` / `withheld`), the Polar split (`polar_rezoned` vs
-  `polar_vendor_fallback`), the date range and up to 20 rows not zoned on the model; derived live from `row_zoning`
+  `polar_vendor_fallback`), the date range and up to 10 rows per category not zoned on the model; derived live from `row_zoning`
   (`zone_reads.zone_coverage`), read-only. The chain report `enrich_user` returns is not persisted (DECISIONS_LOG, the
   "zone coverage is derived on read" ruling), so this is where chat reads coverage.
 - Garmin per-activity time-in-zone ingest (a display-only cross-check) is OUT of scope (R5): `build` issue GH#635.
