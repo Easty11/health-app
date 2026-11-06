@@ -62,3 +62,38 @@ def test_the_guard_stops_when_the_token_changes_mid_walk():
     with pytest.raises(RuntimeError, match="token changed"):
         src.get(gp.ACTIVITY_LIST_PATH, {"start": "0"})
     client.close()
+
+
+def test_a_dry_run_counts_why_streams_came_back_empty(db_session):
+    _user(db_session)
+    host = _bf_host()
+    d = _details([])
+    d["totalMetricsCount"] = 3712
+    host.set(f"{gp.ACTIVITY_PATH}/{AID}/details", d)
+    client, src = _guarded(host)
+    out = bf.backfill(db_session, 1, src, since=date(2026, 3, 1), confirm=False, now=NOW)
+    client.close()
+    assert out["empty_reasons"] == {"no_rows": 1} and out["streams_unmarked"] == 1 and out["thinned"] == 1
+
+
+def test_diagnose_compares_the_asked_and_bare_shapes_and_writes_nothing(db_session):
+    _user(db_session)
+    host = _bf_host()
+    host.set(f"{gp.ACTIVITY_PATH}/{AID}/details",
+             lambda params: {**_details([]), "totalMetricsCount": 60} if params else _details(_ride(seconds=59)))
+    client, src = _guarded(host)
+    lines = bf.diagnose(src, activity_ids=[AID], since=date(2026, 3, 1), limit=3)
+    client.close()
+    assert len(lines) == 2 and lines[0].startswith(f"activity {AID} asked:") and lines[1].startswith(f"activity {AID} bare:")
+    assert "'samples': 0" in lines[0] and "'empty_reason': 'no_rows'" in lines[0]
+    assert "'samples': 60" in lines[1] and "'empty_reason': None" in lines[1]
+    assert _metric_rows(db_session) == [] and _stream(db_session) == []
+    assert [p for _, _, p in host.requests] == [{"maxChartSize": "100000", "maxPolylineSize": "0"}, {}]
+
+
+def test_diagnose_without_ids_takes_the_first_listed(db_session):
+    host = _bf_host()
+    client, src = _guarded(host)
+    lines = bf.diagnose(src, activity_ids=[], since=date(2026, 3, 1), limit=3)
+    client.close()
+    assert [l.split(":")[0] for l in lines] == [f"activity {AID} asked", f"activity {AID} bare"]

@@ -52,7 +52,8 @@ WELLNESS_SWEEP_DAYS = 3
 
 _SELFEVAL_COUNTS = ("fetched", "rated", "unrated", "skipped_needs_refresh", "errors",
                     "metrics_upserted", "metrics_errors",
-                    "stream_fetched", "stream_samples", "stream_thinned", "stream_param_fallback", "stream_errors")
+                    "stream_fetched", "stream_samples", "stream_thinned", "stream_param_fallback", "stream_unmarked",
+                    "stream_errors")
 
 
 _SPO2_COUNTS = ("nights_fetched", "nights_inserted", "nights_replaced", "nights_unchanged", "nights_empty",
