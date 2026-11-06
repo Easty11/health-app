@@ -15767,3 +15767,11 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Decision.** Resolved in-PR (two-way), 2026-11-06, refining #508's capture after the operator's dry runs (5 activities: 0 samples, no reason in the counts; 104 activities: 24 with HR, 25,778 samples, median interval 1.0 s, 11 thinned, 80 empty). `garmin_activity_metrics.StreamParse.conclusive` closes a stream only for samples found, no details (404, empty body, `detailsAvailable` false, or no rows with `totalMetricsCount` 0) or rows with no HR column; an HR column of nulls, or no rows while Garmin reports rows, stays unmarked (`stream_unmarked`) and is retried. The backfill counts empty streams by reason and gains `--diagnose` (payload shape only, asked and bare).
 
 **Reverse-by.** Return `conclusive` to always true: every fetched stream is closed on first read, as #508 shipped.
+
+### #510. Garmin activity summaries are stored without coordinates
+
+**Tier:** ruling
+
+**Decision.** Resolved in-PR (two-way; operator "yes please", 2026-11-06), amending #507's "raw `summaryDTO` kept". The operator's key read of every stored `summary_raw` (74 keys) showed `startLatitude` / `startLongitude` / `endLatitude` / `endLongitude`, which for a session at home are the home's coordinates, and nothing reads them. `garmin_activity_metrics.scrub_location` drops every key ending in Latitude or Longitude, at any depth, before `summary_raw` is written; `scripts/garmin_activity_scrub.py` (operator, dry run by default) removes them from earlier rows. Recovery hours are not on the activity record (only `recoveryHeartRate`); `scripts/garmin_readiness_probe.py` asks whether the Personal API serves the daily readiness / status endpoints before anything is built.
+
+**Reverse-by.** Store `summary` unscrubbed in `parse_metrics`; the scrubbed rows' coordinates return on their next re-fetch.

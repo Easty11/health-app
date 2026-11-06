@@ -756,7 +756,8 @@ class GarminActivityMetric(Base):
     One row per (user, activity), upserted from the detail the self-evaluation lane already fetches
     (`garmin_selfeval`) and by `scripts/garmin_activity_backfill.py`. Every metric column is nullable
     and stored as received; a missing key is NULL, never an error. `te_aerobic` is `trainingEffect`
-    (the probe found no `aerobicTrainingEffect` key). `summary_raw` keeps the whole `summaryDTO`.
+    (the probe found no `aerobicTrainingEffect` key). `summary_raw` keeps the `summaryDTO` minus every key
+    ending in Latitude or Longitude (`garmin_activity_metrics.scrub_location`).
 
     No link to an `aerobic_sessions` row (ruling R1): `reads.garmin_metrics_reads` places a row on a
     session by read-time window overlap, from `start_time_gmt` and `duration_s`. `hr_stream_fetched_at`

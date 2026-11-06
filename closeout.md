@@ -77,7 +77,7 @@ Metrics - Echo Bike Zones Review`. Each step against where it landed:
 **Current sprint (ROADMAP NOW).**
 
 - **Zone model.** DONE and seeded. #503 to #506 have landed and the export path is fixed. Part B (this PR) is BUILT and HELD.
-- **OWED (operator), from the previous session.** Re-upload the Flow export and read its HR-samples line. Open the Training page. Ask chat for `get_zone_coverage`. Restate LTHR 158 as `device_estimated`. Report back a Z2 Echo-bike ride read on its card.
+- **OWED (operator), from the previous session.** Re-upload the Flow export and read its HR-samples line. Open the Training page. Ask chat for `get_zone_coverage`. (The LTHR restatement is DONE: 157 bpm, `device_estimated`, restating the 2026-03-01 seed, in force.) Report back a Z2 Echo-bike ride read on its card.
 - **OWED, this PR.** The deploy check (Code, in-session). Then the backfill dry run and live run, with the counts pasted (operator).
 - **Unchanged.** Ledger UX follow-ups (GH#622 to GH#629), coach ledger writes (GH#612 to GH#617), injury lifecycle (design 0009) and the wake-day three-morning gate.
 
@@ -117,3 +117,39 @@ After GH#642 merged (`02a7fcc`, `deploy-check` SUCCESS on both services), the op
 The parser and the resolution request are confirmed: Garmin accepted `maxChartSize`, and the streams that carry HR come back at 1 s. The 80 empty streams could not be explained from the counts, and the deployed capture would have closed each one on first read. #509 (this branch restarted from `02a7fcc`, a self-merged two-way PR) closes a stream only when the result explains itself. It counts the reason for every empty stream and adds `--diagnose`.
 
 **Next action (operator).** Once this PR's deploy check is green, re-run the dry run and paste its `empty_reasons`. If it shows `no_rows` or `hr_column_no_samples`, run `--diagnose --activity-id <one of them>`. Then run `--confirm`, since only explained streams are closed.
+
+## Addendum — backfill outcome, coordinates, recovery time (#510)
+
+The operator ran the backfill live after #509 deployed.
+
+| Count | Value |
+|---|---|
+| Activities listed | 104 (10 already captured by a lane run) |
+| Metrics rows written | 94 |
+| HR samples written | 25,778 from 24 activities |
+| Median interval | 1.0 s |
+| Empty streams | 70: 52 details unavailable, 18 no HR column |
+| Left open | 0 |
+
+The seven "thinned" warnings were all activities whose details are unavailable (0 rows returned, Garmin reports 1), so no HR stream was thinned. The resolution question is closed. Chat's `get_recent_sessions` shows the 5 Nov ride as `garmin=[kcal 581 TE 5.0 aerobic / 3.1 anaerobic load 276]`, with TE and load as the brief expected.
+
+The operator asked whether recovery hours are included. They are not on the activity: the key read of every stored `summary_raw` gave 74 keys and no recovery-time key, only `recoveryHeartRate`. The same read showed start and end coordinates. #510 drops them at write, and `scripts/garmin_activity_scrub.py` clears them from the stored rows. `scripts/garmin_readiness_probe.py` asks whether the Personal API serves the daily readiness / status endpoints, where recovery time lives.
+
+**Next action (operator).** In `railway ssh`, run `/opt/venv/bin/python -m scripts.garmin_activity_scrub` (dry run), then with `--confirm`. Run `/opt/venv/bin/python -m scripts.garmin_readiness_probe --user-id 1` and paste its output. Open the Training page, then ask chat for `get_zone_coverage`; Health Connect's withheld count was 34 of 75 before the chain re-ran.
+
+## Addendum — the operator's close-out questions (6 Nov 2026)
+
+1. **The 5 Nov ride's stream (activity 24970929418).** The live backfill's median sample interval was 1.0 s, and no HR stream was thinned. Code has no prod read, so the per-activity count is the operator's query below; about 2,090 rows are expected for 34:49. If it comes back far below, `--diagnose --activity-id 24970929418` prints `metricsCount`, `totalMetricsCount`, `measurementCount` and the rows returned, both asked and bare. `measurementCount` is likely the number of metric descriptors, not rows (Likely), so the rows against `totalMetricsCount` is the comparison that settles thinning.
+2. **The 34 withheld Health Connect rows.** The premise that coverage is live from samples holds for Polar rows only. `reads.zone_reads.row_zoning` reports a Health Connect row withheld when its STORED `z1_seconds` is NULL, which only the load chain (`hc_zone_enrich`, run on Training-page open and nightly) writes. So a Training-page visit does change the Health Connect count. The query below lists each withheld row's `source_package` and its `garmin` / `activity_details` sample count. Which of the 52 no-details activities are hevy2garmin uploads is not in stored data: the empty reason and the uploader are not persisted, and the 74 summary keys carry no uploader. The backfill's new `--reasons` mode answers it by counting every activity by reason, type and the list item's `manufacturer`.
+3. **Nothing beyond the HR samples is kept from the details payload.** `read_stream` keeps only (time, bpm) pairs, and the metrics row gains only `hr_stream_fetched_at` and `hr_stream_samples`. The request asks `maxPolylineSize=0`, and `test_the_details_payload_is_never_kept_beyond_its_hr_samples` feeds a `geoPolylineDTO` and asserts only `hr_samples` gains rows. The readiness probe has no write path. Its session is rolled back, and its token write-back is a no-op because the guard refuses any exchange.
+4. **LTHR.** In force: 157 bpm, `device_estimated`, restating the 2026-03-01 seed, read from MCP `get_hr_zone_config` on 6 Nov. The ROADMAP OWED clause and the previous section's line now say so. #502's text (158, the seed) is locked and historical, and design 0010's worked examples quote the brief's anchors.
+
+Operator queries, in psql via `railway connect`:
+
+```sql
+SELECT m.hr_stream_samples, m.duration_s, count(h.id) AS stored FROM garmin_activity_metrics m LEFT JOIN hr_samples h ON h.user_id = m.user_id AND h.source = 'garmin' AND h.source_package = 'activity_details' AND h.sample_time BETWEEN m.start_time_gmt AND m.start_time_gmt + m.duration_s * interval '1 second' WHERE m.garmin_activity_id = 24970929418 GROUP BY m.hr_stream_samples, m.duration_s;
+```
+
+```sql
+SELECT a.id, a.session_date, a.sport_name, a.source_package, count(h.id) AS garmin_stream FROM aerobic_sessions a LEFT JOIN hr_samples h ON h.user_id = a.user_id AND h.source = 'garmin' AND h.source_package = 'activity_details' AND h.sample_time BETWEEN a.start_time AND a.stop_time WHERE a.user_id = 1 AND a.source = 'health_connect' AND a.z1_seconds IS NULL GROUP BY a.id ORDER BY a.session_date;
+```
