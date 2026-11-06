@@ -1158,8 +1158,8 @@ def get_zone_coverage(days: int | None = None) -> str:
     class on % of LTHR; hrr: every other sport on % of heart-rate reserve), kept on Polar's
     own zones (vendor, polar_vendor_fallback), withheld for a missing anchor (no_anchor) or
     for sparse / absent same-writer samples (withheld); the Polar split (polar_rezoned from
-    the Polar Flow trace vs polar_vendor_fallback); the session date range; and up to 20 rows
-    not zoned on the model with their reason. `days` limits the window (None = all history).
+    the Polar Flow trace vs polar_vendor_fallback); the session date range; and up to 10 rows
+    per category not zoned on the model (vendor, no_anchor, withheld) with their reason. `days` limits the window (None = all history).
     Read-only and DERIVED: the counts come live from the same per-row zoning read the
     sessions API uses; the refresh_load chain report is not stored, so nothing here is a
     record of a run."""

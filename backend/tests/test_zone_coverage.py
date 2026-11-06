@@ -6,7 +6,7 @@ GATES (from the brief):
   * an HC row zoned lthr; an HC row zoned hrr;
   * a Polar row re-zoned from a `fi.polar.polarflow` Health Connect trace; a Polar row in vendor fallback;
   * a no_anchor row (anchors absent); a withheld row;
-  * the days filter; the 20-row cap; no DB writes (the session is not dirty after the call);
+  * the days filter; the 10-row cap per non-zoned category (vendor, no_anchor, withheld); no DB writes (the session is not dirty after the call);
   * the Polar classification is `row_zoning`'s, not a second implementation;
   * the MCP tool renders the read, stamped, read-only.
 """
@@ -98,7 +98,7 @@ def test_every_category_is_counted_per_source_and_the_polar_split_reads_from_the
                               "basis": "hrr", "reason": "withheld"}
     assert listed[fallback.id] == {"id": fallback.id, "date": "2026-11-02", "sport": "Indoor cycling", "source": "polar_v4",
                                   "basis": "vendor", "reason": "polar_vendor_fallback"}
-    assert cov["rows_not_listed"] == 0
+    assert cov["rows_not_listed"] == {"vendor": 0, "no_anchor": 0, "withheld": 0}
 
 
 def test_without_anchors_every_row_is_no_anchor_and_a_polar_row_is_not_counted_as_vendor_fallback(db_session):
@@ -199,22 +199,56 @@ def test_an_empty_window_reads_as_empty_not_as_an_error(db_session):
     assert "no aerobic sessions in the window" in zone_reads.format_zone_coverage(cov)
 
 
-def test_the_listed_rows_cap_at_twenty_oldest_first_and_the_rest_are_counted(db_session):
+def test_the_listed_rows_cap_at_ten_per_category_oldest_first_and_the_rest_are_counted(db_session):
     u = _user(db_session)
     _seeded(db_session, u.id)
-    ids = []
-    for i in range(23):
+    for i in range(13):
         s = S - timedelta(days=i)
-        ids.append(_row(db_session, u.id, f"w{i}", s, s + timedelta(minutes=30), sport="Walking").id)   # withheld
+        _row(db_session, u.id, f"w{i}", s, s + timedelta(minutes=30), sport="Walking")             # withheld
     _row(db_session, u.id, "ok", *_day(1), zoned=True)                                              # zoned: never listed
     cov = zone_reads.zone_coverage(db_session, u.id, today=TODAY)
-    assert cov["total"] == 24 and cov["totals"]["withheld"] == 23
-    assert len(cov["rows"]) == zone_reads.COVERAGE_SAMPLE_CAP == 20 and cov["rows_not_listed"] == 3
+    assert cov["total"] == 14 and cov["totals"]["withheld"] == 13
+    assert len(cov["rows"]) == zone_reads.COVERAGE_SAMPLE_CAP == 10
+    assert cov["rows_not_listed"] == {"vendor": 0, "no_anchor": 0, "withheld": 3}
     dates = [r["date"] for r in cov["rows"]]
-    assert dates == sorted(dates) and dates[0] == (S - timedelta(days=22) + timedelta(hours=10)).date().isoformat()
+    assert dates == sorted(dates) and dates[0] == (S - timedelta(days=12) + timedelta(hours=10)).date().isoformat()
     assert all(r["reason"] == "withheld" for r in cov["rows"])
     text = zone_reads.format_zone_coverage(cov)
-    assert "first 20; 3 more not listed" in text
+    assert "rows not zoned on the model (oldest first, up to 10 per category):" in text
+    assert "    withheld: 10 of 13 listed; 3 more not listed" in text
+
+
+def test_a_full_category_never_hides_another(db_session):
+    """GH evidence (2026-11-06): a global cap of 20 filled with Polar vendor rows and hid every withheld
+    health_connect row. The vendor rows here are the OLDEST, so a global oldest-first cap would list
+    nothing else; capped per category, every non-empty non-zoned category is listed in one call."""
+    u = _user(db_session)
+    db_session.add(models.UserHrmax(user_id=u.id, effective_from=date(2026, 3, 1), hrmax_bpm=179, provenance="observed", note="H10"))
+    db_session.add(models.UserHrAnchor(user_id=u.id, kind="rhr", effective_from=date(2026, 3, 1), bpm=51, provenance="stated", note="t"))
+    db_session.commit()                                               # no LTHR: the cycling class has no anchor
+    for i in range(25):
+        s = S - timedelta(days=100 - i)
+        _row(db_session, u.id, f"v{i}", s, s + timedelta(minutes=30), source="polar_v4", sport="Running")   # vendor
+    for i in range(12):
+        s = S - timedelta(days=50 - i)
+        _row(db_session, u.id, f"w{i}", s, s + timedelta(minutes=30), sport="Walking")                      # withheld
+    for i in range(3):
+        _row(db_session, u.id, f"n{i}", *_day(i))                                                           # no_anchor
+    cov = zone_reads.zone_coverage(db_session, u.id, today=TODAY)
+    assert cov["totals"] == {"lthr": 0, "hrr": 0, "vendor": 25, "no_anchor": 3, "withheld": 12}
+    by_cat: dict[str, list] = {}
+    for r in cov["rows"]:
+        by_cat.setdefault(zone_reads.coverage_category(r), []).append(r)
+    assert {c: len(v) for c, v in by_cat.items()} == {"vendor": 10, "withheld": 10, "no_anchor": 3}
+    assert cov["rows_not_listed"] == {"vendor": 15, "no_anchor": 0, "withheld": 2}
+    assert all(r["source"] == "health_connect" for r in by_cat["withheld"])
+    dates = [r["date"] for r in cov["rows"]]
+    assert dates == sorted(dates)                                     # one list, oldest first across categories
+    text = zone_reads.format_zone_coverage(cov)
+    assert "    vendor (polar_vendor_fallback): 10 of 25 listed; 15 more not listed" in text
+    assert "    no_anchor: 3 of 3 listed" in text and "no_anchor: 3 of 3 listed;" not in text
+    assert "    withheld: 10 of 12 listed; 2 more not listed" in text
+    assert text.index("vendor (polar_vendor_fallback): 10 of") < text.index("no_anchor: 3 of") < text.index("withheld: 10 of")
 
 
 def test_the_read_writes_nothing(db_session, monkeypatch):
@@ -257,7 +291,8 @@ def test_the_formatter_names_the_window_each_source_the_polar_split_and_where_th
     assert "  polar_v4 (1): lthr 0 · hrr 0 · vendor (polar_vendor_fallback) 1 · no_anchor 0 · withheld 0" in text
     assert ("  Polar rows 1: polar_rezoned 0 (zoned on the model from the Polar trace: the fi.polar.polarflow "
             "Health Connect copy or the Flow export's samples) · polar_vendor_fallback 1") in text
-    assert f"    row {fb.id} 2026-10-31 Indoor cycling [polar_v4]: polar_vendor_fallback (basis vendor)" in text
+    assert "    vendor (polar_vendor_fallback): 1 of 1 listed" in text
+    assert f"      row {fb.id} 2026-10-31 Indoor cycling [polar_v4]: polar_vendor_fallback (basis vendor)" in text
     assert lines[-1] == ("  Counts are derived live from reads.zone_reads.row_zoning, the sessions API's zoning path; "
                          "the refresh_load chain report is not stored, so no run-to-run delta is available here.")
 

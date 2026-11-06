@@ -178,7 +178,11 @@ def annotate_zoning(db: Session, user_id: int, rows: list) -> list:
 # ── coverage: how every row is zoned, derived on read ────────────────────────────────────────────
 
 COVERAGE_CATEGORIES = ("lthr", "hrr", "vendor", "no_anchor", "withheld")
-COVERAGE_SAMPLE_CAP = 20
+# The categories `rows` lists (every one not zoned on the model), each capped on its own so one full
+# category never hides another (2026-11-06: a global cap of 20 filled with Polar vendor rows and hid all
+# 34 withheld health_connect rows).
+COVERAGE_LISTED_CATEGORIES = ("vendor", "no_anchor", "withheld")
+COVERAGE_SAMPLE_CAP = 10              # per listed category
 
 
 def coverage_category(zoning: dict[str, Any]) -> str:
@@ -207,8 +211,10 @@ def zone_coverage(db: Session, user_id: int, days: Optional[int] = None, *,
 
     Returns `{as_of, days, since, total, date_range: {first, last}, by_source: {source: {category: n}},
     totals: {category: n}, polar: {rows, rezoned, vendor_fallback, vendor_no_anchor}, rows: [...]}`,
-    where `rows` lists up to `COVERAGE_SAMPLE_CAP` rows that are not zoned on the model (`vendor`,
-    `no_anchor`, `withheld`), oldest first, each `{id, date, sport, source, basis, reason}`."""
+    where `rows` lists, oldest first, up to `COVERAGE_SAMPLE_CAP` rows PER category not zoned on the model
+    (`COVERAGE_LISTED_CATEGORIES`: `vendor`, `no_anchor`, `withheld`), each `{id, date, sport, source,
+    basis, reason}` (its category is `coverage_category` of the row), and `rows_not_listed` counts the
+    rest per listed category."""
     from hc_zone_enrich import POLAR_SOURCES
     today = today or date.today()
     since = today - timedelta(days=days) if days is not None else None
@@ -222,7 +228,8 @@ def zone_coverage(db: Session, user_id: int, days: Optional[int] = None, *,
     totals = {c: 0 for c in COVERAGE_CATEGORIES}
     polar = {"rows": 0, "rezoned": 0, "vendor_fallback": 0, "vendor_no_anchor": 0}
     sample: list[dict[str, Any]] = []
-    sample_overflow = 0
+    sample_overflow = {c: 0 for c in COVERAGE_LISTED_CATEGORIES}
+    sample_listed = {c: 0 for c in COVERAGE_LISTED_CATEGORIES}
     for r in rows:
         z = row_zoning(db, user_id, r, entries)
         cat = coverage_category(z)
@@ -236,12 +243,13 @@ def zone_coverage(db: Session, user_id: int, days: Optional[int] = None, *,
                 polar["vendor_fallback"] += 1
             else:
                 polar["vendor_no_anchor"] += 1
-        if cat in ("vendor", "no_anchor", "withheld"):
-            if len(sample) < COVERAGE_SAMPLE_CAP:
+        if cat in COVERAGE_LISTED_CATEGORIES:
+            if sample_listed[cat] < COVERAGE_SAMPLE_CAP:
+                sample_listed[cat] += 1
                 sample.append({"id": r.id, "date": r.session_date.isoformat(), "sport": r.sport_name,
                                "source": r.source, "basis": z["basis"], "reason": z["reason"]})
             else:
-                sample_overflow += 1
+                sample_overflow[cat] += 1
     return {
         "as_of": today.isoformat(),
         "days": days,
@@ -331,12 +339,17 @@ def format_zone_coverage(cov: dict[str, Any]) -> str:
                          f"kept: anchors in force, no trace covering the bout) · vendor with no anchor "
                          f"{p['vendor_no_anchor']} (counted under no_anchor above)")
         if cov["rows"]:
-            n = len(cov["rows"])
-            more = f"; {cov['rows_not_listed']} more not listed" if cov["rows_not_listed"] else ""
-            lines.append(f"  rows not zoned on the model (oldest first, first {n}{more}):")
-            for r in cov["rows"]:
-                lines.append(f"    row {r['id']} {r['date']} {r['sport']} [{r['source']}]: {r['reason']}"
-                             + (f" (basis {r['basis']})" if r["basis"] else ""))
+            lines.append(f"  rows not zoned on the model (oldest first, up to {COVERAGE_SAMPLE_CAP} per category):")
+            for cat in COVERAGE_LISTED_CATEGORIES:
+                listed = [r for r in cov["rows"] if coverage_category(r) == cat]
+                if not listed:
+                    continue
+                more = cov["rows_not_listed"][cat]
+                tail = f"; {more} more not listed" if more else ""
+                lines.append(f"    {COVERAGE_LABELS[cat]}: {len(listed)} of {cov['totals'][cat]} listed{tail}")
+                for r in listed:
+                    lines.append(f"      row {r['id']} {r['date']} {r['sport']} [{r['source']}]: {r['reason']}"
+                                 + (f" (basis {r['basis']})" if r["basis"] else ""))
     lines.append("  Counts are derived live from reads.zone_reads.row_zoning, the sessions API's zoning path; "
                  "the refresh_load chain report is not stored, so no run-to-run delta is available here.")
     return "\n".join(lines)

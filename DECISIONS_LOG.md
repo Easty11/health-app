@@ -15775,3 +15775,11 @@ The post-apply per-band comparison (HC minus Polar, minutes z1..z5, per shared b
 **Decision.** Resolved in-PR (two-way; operator "yes please", 2026-11-06), amending #507's "raw `summaryDTO` kept". The operator's key read of every stored `summary_raw` (74 keys) showed `startLatitude` / `startLongitude` / `endLatitude` / `endLongitude`, which for a session at home are the home's coordinates, and nothing reads them. `garmin_activity_metrics.scrub_location` drops every key ending in Latitude or Longitude, at any depth, before `summary_raw` is written; `scripts/garmin_activity_scrub.py` (operator, dry run by default) removes them from earlier rows. Recovery hours are not on the activity record (only `recoveryHeartRate`); `scripts/garmin_readiness_probe.py` asks whether the Personal API serves the daily readiness / status endpoints before anything is built.
 
 **Reverse-by.** Store `summary` unscrubbed in `parse_metrics`; the scrubbed rows' coordinates return on their next re-fetch.
+
+### #511. get_zone_coverage caps its listed rows per non-zoned category
+
+**Tier:** ruling
+
+**Decision.** Resolved in-PR (two-way), 2026-11-06, amending #505's "up to 20 rows not zoned on the model". `zone_reads.zone_coverage` lists up to `COVERAGE_SAMPLE_CAP` = 10 rows PER category in `COVERAGE_LISTED_CATEGORIES` (`vendor`, `no_anchor`, `withheld`), oldest first in one list, and `rows_not_listed` becomes a per-category count; `format_zone_coverage` groups the listed rows by category with an "N of M listed" line. The global cap of 20 filled with Polar vendor rows on 2026-11-06 and hid all 34 withheld health_connect rows (found by psql). Tests: `tests/test_zone_coverage.py::test_a_full_category_never_hides_another` (25 vendor rows oldest, 12 withheld, 3 no_anchor: every category listed in one call).
+
+**Reverse-by.** Set `COVERAGE_SAMPLE_CAP` back to 20 and count it across `COVERAGE_LISTED_CATEGORIES` as one cap; return `rows_not_listed` to an integer.
