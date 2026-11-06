@@ -153,3 +153,32 @@ SELECT m.hr_stream_samples, m.duration_s, count(h.id) AS stored FROM garmin_acti
 ```sql
 SELECT a.id, a.session_date, a.sport_name, a.source_package, count(h.id) AS garmin_stream FROM aerobic_sessions a LEFT JOIN hr_samples h ON h.user_id = a.user_id AND h.source = 'garmin' AND h.source_package = 'activity_details' AND h.sample_time BETWEEN a.start_time AND a.stop_time WHERE a.user_id = 1 AND a.source = 'health_connect' AND a.z1_seconds IS NULL GROUP BY a.id ORDER BY a.session_date;
 ```
+
+## Addendum — the operator's close-out answers, measured (6 Nov 2026)
+
+1. **The 5 Nov ride (24970929418).** `hr_stream_samples` is 1,115, with 1,114 rows inside the 2,088.7 s window. `--diagnose` gives:
+
+   | Request | Rows returned | `totalMetricsCount` | `measurementCount` |
+   |---|---|---|---|
+   | Asked (`maxChartSize=100000`) | 1,117 | 1,117 | 9 |
+   | Bare (no parameters) | 229 | 1,117 | 9 |
+
+   The lane gets every row Garmin holds (Certain). Without the parameter, the API returns about a fifth. `measurementCount` is the number of metric descriptors (9), not rows, so comparing rows with it would misread every activity as thinned. The 1.87 s average cadence is the watch's smart recording (Likely); "Every Second" recording would give 1 s. The backfill's 1.0 s figure is a median of per-activity medians.
+2. **The withheld Health Connect rows.** The query returned 35 rows with NULL zones: 18 Strava, 10 Samsung Health, 6 Garmin Connect, 2 Polar Flow. Nine hold `garmin` / `activity_details` samples in their window: rows 103, 115, 118, 119, 120, 121, 122, 125 and 129.
+   - **Row 129** (13 Oct Pilates, Garmin-written, 663 samples) is the only one #508 lets read the stream. It still reads withheld after a chain run, so it is likely sparse.
+   - **The other eight** are uncounted copies, per `get_training_sessions`. Five are Strava or Samsung twins of a counted Polar-export or Health Connect row. Two are Strava weightlifting rows likely relayed from Hevy. One is a Samsung twin of the 8 Oct walk. Zoning them would change no load, so #508 is not extended to Strava rows.
+   - **The other five Garmin-written rows** (69, 85, 92, 135, 139) have no stream: Garmin holds no details for those activities.
+3. **Uploads (`--reasons`, 104 activities).**
+
+   | Group | Count |
+   |---|---|
+   | `DEVELOPMENT` strength training: no details | 52 |
+   | `DEVELOPMENT` strength training: no HR column | 20 |
+   | Garmin-recorded Pilates and rugby: no details | 8 (5 and 3) |
+   | With HR | 24 |
+
+   All 72 strength activities are third-party FIT uploads (likely hevy2garmin) and carry no HR.
+4. **Coordinates.** The scrub wrote 5 rows and removed 20 keys.
+5. **Recovery time.** The Personal API returns 404 for `trainingreadiness` and `trainingstatus/aggregated` on 2026-11-05 and 2026-11-06. Recovery hours are out of scope; the negative covers these two paths on this host only.
+
+**Open, for the operator.** A Z2 Echo-bike ride read on its card, as before. Optionally, switch the watch to "Every Second" recording.
