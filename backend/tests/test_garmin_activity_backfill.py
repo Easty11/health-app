@@ -97,3 +97,24 @@ def test_diagnose_without_ids_takes_the_first_listed(db_session):
     lines = bf.diagnose(src, activity_ids=[], since=date(2026, 3, 1), limit=3)
     client.close()
     assert [l.split(":")[0] for l in lines] == [f"activity {AID} asked", f"activity {AID} bare"]
+
+
+def test_reasons_groups_by_stream_reason_type_and_manufacturer_and_writes_nothing(db_session):
+    _user(db_session)
+    host = FakeHost()
+    host.set(gp.ACTIVITY_LIST_PATH, lambda params: [
+        {**_item(), "manufacturer": "GARMIN"},
+        {"activityId": 2, "startTimeGMT": "2026-03-02 07:00:00", "duration": 600.0,
+         "activityType": {"typeKey": "strength_training"}, "manufacturer": "DEVELOPMENT"},
+        {"activityId": 3, "startTimeGMT": "2026-03-03 07:00:00", "duration": 600.0,
+         "activityType": {"typeKey": "strength_training"}, "manufacturer": "DEVELOPMENT"},
+    ] if params.get("start") == "0" else [])
+    host.set(f"{gp.ACTIVITY_PATH}/{AID}/details", _details(_ride(seconds=9)))
+    host.set(f"{gp.ACTIVITY_PATH}/2/details", {**_details([]), "detailsAvailable": False})
+    host.set(f"{gp.ACTIVITY_PATH}/3/details", {**_details([]), "detailsAvailable": False})
+    client, src = _guarded(host)
+    counts = bf.reasons(src, since=date(2026, 3, 1))
+    client.close()
+    assert counts == {"details_unavailable | strength_training | manufacturer=DEVELOPMENT": 2,
+                      "hr | indoor_cycling | manufacturer=GARMIN": 1}
+    assert _metric_rows(db_session) == [] and _stream(db_session) == []

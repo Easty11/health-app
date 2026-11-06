@@ -5,6 +5,11 @@
     /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --confirm        # writes
     /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --diagnose --activity-id 24970929418
 
+`--reasons` writes nothing and prints COUNTS of every listed activity grouped by why its stream holds HR or
+not (`hr`, `details_unavailable`, `no_hr_column`, ...), its activity type and the list item's `manufacturer`
+(the uploader's vendor string; a third-party upload such as hevy2garmin shows here, not in the summary).
+One list GET per page and one details GET per activity, paced as the lane.
+
 `--diagnose` writes nothing and prints, per activity (`--activity-id`, repeatable, else the first `--limit`
 listed, default 3), the SHAPE of its details payload twice: as the lane asks for it (`maxChartSize` and no
 polyline) and bare (no parameters, as the 6 Nov probe asked). Counts, booleans, the timestamp and HR column
@@ -181,6 +186,35 @@ def diagnose(source: Any, *, activity_ids: list[int], since: date, limit: int) -
     return lines
 
 
+def reasons(source: Any, *, since: date) -> dict[str, int]:
+    """Read-only: `{"<reason> | <typeKey> | manufacturer=<m>": count}` over every activity listed from `since`."""
+    out: dict[str, int] = {}
+    seen: set[int] = set()
+    for page in range(MAX_PAGES):
+        listed = source.get(gp.ACTIVITY_LIST_PATH, {"startDate": since.isoformat(), "start": str(page * PAGE),
+                                                    "limit": str(PAGE), "sortOrder": "asc"})
+        items = [it for it in (listed if isinstance(listed, list) else []) if isinstance(it, dict)
+                 and isinstance(it.get("activityId"), int) and not isinstance(it.get("activityId"), bool)
+                 and it["activityId"] not in seen]
+        if not items:
+            break
+        for it in items:
+            seen.add(it["activityId"])
+            atype = it.get("activityType")
+            tkey = atype.get("typeKey") if isinstance(atype, dict) else None
+            maker = it.get("manufacturer")
+            try:
+                parsed, _ = gam.read_stream(source, it["activityId"])
+                reason = parsed.empty_reason or "hr"
+            except Exception as exc:  # noqa: BLE001 -- the error CLASS is the whole report
+                reason = f"error:{type(exc).__name__}"
+            key = f"{reason} | {tkey or '?'} | manufacturer={maker if isinstance(maker, str) else '?'}"
+            out[key] = out.get(key, 0) + 1
+        if len(items) < PAGE:
+            break
+    return dict(sorted(out.items()))
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Garmin activity metrics + HR stream backfill (dry run unless --confirm).")
     p.add_argument("--user-id", type=int, required=True)
@@ -188,13 +222,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=None, help="stop after this many listed activities")
     p.add_argument("--confirm", action="store_true", help="write (default is a dry run)")
     p.add_argument("--diagnose", action="store_true", help="print each activity's details payload shape; writes nothing")
+    p.add_argument("--reasons", action="store_true",
+                   help="count activities by stream reason, type and manufacturer; writes nothing")
     p.add_argument("--activity-id", action="append", default=[], help="with --diagnose: this activity (repeatable)")
     args = p.parse_args(argv)
     since = date.fromisoformat(args.since)
     if any(not a.isdigit() or len(a) > 20 for a in args.activity_id):
         p.error("--activity-id must be digits only")
-    if args.diagnose and args.confirm:
-        p.error("--diagnose writes nothing; drop --confirm")
+    if (args.diagnose or args.reasons) and args.confirm:
+        p.error("--diagnose and --reasons write nothing; drop --confirm")
 
     from database import SessionLocal
 
@@ -205,6 +241,11 @@ def main(argv: list[str] | None = None) -> int:
                 if client is None:
                     print(f"user {args.user_id} has no garmin_personal key; nothing was fetched.", file=sys.stderr)
                     return 1
+                if args.reasons:
+                    counts = reasons(GuardedSource(client), since=since)
+                    print("REASONS (nothing written; counts only)")
+                    print("\n".join(f"  {n:4d}  {k}" for k, n in counts.items()) or "no activity listed")
+                    return 0
                 if args.diagnose:
                     lines = diagnose(GuardedSource(client), activity_ids=[int(a) for a in args.activity_id],
                                      since=since, limit=args.limit or 3)

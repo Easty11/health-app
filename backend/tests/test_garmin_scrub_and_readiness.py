@@ -91,3 +91,28 @@ def test_the_probe_reports_a_404_and_a_refusal_by_class():
     client.close()
     assert lines[0].endswith("404 (not served, or nothing for 2026-11-06)")
     assert lines[1].endswith("fetch failed: PersonalAuthError")
+
+
+def test_the_details_payload_is_never_kept_beyond_its_hr_samples(db_session):
+    """The details response carries `geoPolylineDTO` (the GPS track). Only (time, bpm) pairs leave it: the metrics
+    row gains its two stream columns and nothing else, and no other table is written."""
+    from sqlalchemy import inspect as sa_inspect
+    from test_garmin_activity_metrics import _details, _metrics_row, _ride, _stream
+
+    _user(db_session)
+    _metrics_row(db_session)
+    before_raw = dict(_metric_rows(db_session)[0].summary_raw)
+    counts = {t: db_session.execute(models.Base.metadata.tables[t].select()).fetchall().__len__()
+              for t in sa_inspect(db_session.get_bind()).get_table_names()}
+    details = _details(_ride(seconds=9))
+    details["geoPolylineDTO"] = {"polyline": [{"lat": -27.4, "lon": 153.0, "time": 1}], "startPoint": {"lat": -27.4}}
+    host = FakeHost()
+    host.set(f"{gp.ACTIVITY_PATH}/{AID}/details", details)
+    with gp.PersonalClient(FAKE_KEY, transport=host.transport()) as client:
+        gam.sync_streams(db_session, 1, client, now=NOW)
+    db_session.expire_all()
+    after = {t: db_session.execute(models.Base.metadata.tables[t].select()).fetchall().__len__() for t in counts}
+    assert {t: after[t] - counts[t] for t in counts if after[t] != counts[t]} == {"hr_samples": 10}
+    m = _metric_rows(db_session)[0]
+    assert m.summary_raw == before_raw and "geoPolylineDTO" not in str(m.summary_raw)
+    assert m.hr_stream_samples == 10 and len(_stream(db_session)) == 10
