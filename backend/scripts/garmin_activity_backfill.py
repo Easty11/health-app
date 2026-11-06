@@ -3,6 +3,12 @@
     /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1                  # dry run
     /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --limit 5        # a quick dry run
     /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --confirm        # writes
+    /opt/venv/bin/python -m scripts.garmin_activity_backfill --user-id 1 --diagnose --activity-id 24970929418
+
+`--diagnose` writes nothing and prints, per activity (`--activity-id`, repeatable, else the first `--limit`
+listed, default 3), the SHAPE of its details payload twice: as the lane asks for it (`maxChartSize` and no
+polyline) and bare (no parameters, as the 6 Nov probe asked). Counts, booleans, the timestamp and HR column
+indices and the type names of the first row's cells at them, and why no samples came back; never a reading.
 
 Operator-run, in `railway ssh --service health-app-backend`, from `/app`. Walks the Personal API activity
 list from `--since` (default 2026-03-01), oldest first, 50 a page, and per activity makes at most two GETs
@@ -68,7 +74,7 @@ def _new_counts() -> dict[str, Any]:
     return {"activities_listed": 0, "already_captured": 0, "details_fetched": 0, "metrics_found": 0,
             "metrics_written": 0, "detail_shape_errors": 0, "streams_fetched": 0, "streams_with_hr": 0,
             "samples_found": 0, "samples_written": 0, "null_bpm": 0, "thinned": 0, "param_fallback": 0,
-            "median_interval_s": None, "stopped": "end_of_list"}
+            "streams_unmarked": 0, "empty_reasons": {}, "median_interval_s": None, "stopped": "end_of_list"}
 
 
 def _list_items(listed: Any) -> list[tuple[int, Optional[datetime], Optional[float]]]:
@@ -129,19 +135,21 @@ def backfill(db, user_id: int, source: Any, *, since: date, confirm: bool, limit
             if confirm:
                 res = gam.capture_stream(db, user_id, source, row, now=now)
                 db.commit()
-                found, written, thinned, fallback, interval, has_hr = (
-                    res["found"], res["stored"], res["thinned"], res["param_fallback"], res["interval_s"], res["has_hr"])
-                nulls = None
+                found, written, thinned, fallback, interval = (
+                    res["found"], res["stored"], res["thinned"], res["param_fallback"], res["interval_s"])
+                nulls, reason, marked = res["null_bpm"], res["empty_reason"], res["marked"]
             else:
                 parsed, fallback = gam.read_stream(source, aid)
-                found, written, thinned, interval, has_hr = (
-                    len(parsed.samples), 0, parsed.thinned, parsed.interval_s, parsed.has_hr)
-                nulls = parsed.null_bpm
+                found, written, thinned, interval = len(parsed.samples), 0, parsed.thinned, parsed.interval_s
+                nulls, reason, marked = parsed.null_bpm, parsed.empty_reason, parsed.conclusive
             out["streams_fetched"] += 1
             out["streams_with_hr"] += int(found > 0)
             out["samples_found"] += found
             out["samples_written"] += written
             out["null_bpm"] += nulls or 0
+            out["streams_unmarked"] += int(not marked)
+            if reason is not None:
+                out["empty_reasons"][reason] = out["empty_reasons"].get(reason, 0) + 1
             out["thinned"] += int(thinned)
             out["param_fallback"] += int(fallback)
             if interval is not None:
@@ -154,14 +162,39 @@ def backfill(db, user_id: int, source: Any, *, since: date, confirm: bool, limit
     return out
 
 
+def diagnose(source: Any, *, activity_ids: list[int], since: date, limit: int) -> list[str]:
+    """Read-only: each activity's details payload SHAPE, asked as the lane asks and bare. Lines, no values."""
+    ids = list(activity_ids)
+    if not ids:
+        listed = source.get(gp.ACTIVITY_LIST_PATH, {"startDate": since.isoformat(), "start": "0",
+                                                    "limit": str(limit), "sortOrder": "asc"})
+        ids = [aid for aid, _, _ in _list_items(listed)][:limit]
+    lines = []
+    for aid in ids:
+        path = f"{gp.ACTIVITY_PATH}/{aid}{gam.DETAILS_SUFFIX}"
+        for label, params in (("asked", dict(gam.STREAM_PARAMS)), ("bare", None)):
+            try:
+                shape = gam.details_shape(source.get(path, params))
+            except Exception as exc:  # noqa: BLE001 -- the error CLASS is the whole report
+                shape = {"error": type(exc).__name__}
+            lines.append(f"activity {aid} {label}: {shape}")
+    return lines
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Garmin activity metrics + HR stream backfill (dry run unless --confirm).")
     p.add_argument("--user-id", type=int, required=True)
     p.add_argument("--since", default=DEFAULT_SINCE.isoformat(), help="first activity date, YYYY-MM-DD")
     p.add_argument("--limit", type=int, default=None, help="stop after this many listed activities")
     p.add_argument("--confirm", action="store_true", help="write (default is a dry run)")
+    p.add_argument("--diagnose", action="store_true", help="print each activity's details payload shape; writes nothing")
+    p.add_argument("--activity-id", action="append", default=[], help="with --diagnose: this activity (repeatable)")
     args = p.parse_args(argv)
     since = date.fromisoformat(args.since)
+    if any(not a.isdigit() or len(a) > 20 for a in args.activity_id):
+        p.error("--activity-id must be digits only")
+    if args.diagnose and args.confirm:
+        p.error("--diagnose writes nothing; drop --confirm")
 
     from database import SessionLocal
 
@@ -172,6 +205,12 @@ def main(argv: list[str] | None = None) -> int:
                 if client is None:
                     print(f"user {args.user_id} has no garmin_personal key; nothing was fetched.", file=sys.stderr)
                     return 1
+                if args.diagnose:
+                    lines = diagnose(GuardedSource(client), activity_ids=[int(a) for a in args.activity_id],
+                                     since=since, limit=args.limit or 3)
+                    print("DIAGNOSE (nothing written; shapes only, no readings)")
+                    print("\n".join(lines) or "no activity listed")
+                    return 0
                 result = backfill(db, args.user_id, GuardedSource(client), since=since, confirm=args.confirm,
                                   limit=args.limit)
         except RefreshWouldBeNeeded:

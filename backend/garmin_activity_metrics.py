@@ -149,10 +149,39 @@ class StreamParse:
     null_bpm: int = 0
     interval_s: Optional[float] = None          # median gap between consecutive timestamps
     has_hr: bool = False                        # the descriptors name both the timestamp and HR
+    absent: bool = False                        # Garmin has no details at all (404 or an empty body)
+    details_available: Optional[bool] = None    # the payload's own `detailsAvailable`, when sent
 
     @property
     def thinned(self) -> bool:
         return self.total_rows is not None and self.total_rows > self.rows
+
+    @property
+    def conclusive(self) -> bool:
+        """Whether this result may close the activity's stream for good. True when samples were found,
+        when Garmin has no details (`absent`, `detailsAvailable` false, or no rows and a total of 0), or
+        when rows came back but carry no HR column (an activity recorded without HR). Anything else (an
+        HR column with no usable sample, or no rows while Garmin reports rows exist) is unexplained, so it
+        is left for the next run rather than recorded as "no HR" (6 Nov 2026: the first dry run read 0
+        samples from 5 activities with no explanation in its counts)."""
+        if self.samples or self.absent or self.details_available is False:
+            return True
+        if self.rows == 0:
+            return self.total_rows == 0
+        return not self.has_hr
+
+    @property
+    def empty_reason(self) -> Optional[str]:
+        """Why no samples came back: None when some did, else a short code the counts carry."""
+        if self.samples:
+            return None
+        if self.absent:
+            return "absent"
+        if self.details_available is False:
+            return "details_unavailable"
+        if self.rows == 0:
+            return "no_rows_total_0" if self.total_rows == 0 else "no_rows"
+        return "no_hr_column" if not self.has_hr else "hr_column_no_samples"
 
 
 def _index_of(descriptors: Any) -> dict[str, int]:
@@ -181,6 +210,8 @@ def parse_hr_stream(details: Any) -> StreamParse:
     rows = rows if isinstance(rows, list) else []
     total = details.get("totalMetricsCount")
     out = StreamParse(rows=len(rows), total_rows=total if isinstance(total, int) and not isinstance(total, bool) else None)
+    avail = details.get("detailsAvailable")
+    out.details_available = avail if isinstance(avail, bool) else None
     idx = _index_of(details.get("metricDescriptors"))
     if TS_KEY not in idx or HR_KEY not in idx:
         return out
@@ -237,7 +268,7 @@ def read_stream(source: Any, activity_id: int) -> tuple[Optional[StreamParse], b
     try:
         details = source.get(path, dict(STREAM_PARAMS))
     except gp.PersonalNotFound:
-        return StreamParse(), False
+        return StreamParse(absent=True), False
     except gp.PersonalTransientError as exc:
         if str(exc) != "HTTP 400":
             raise
@@ -245,10 +276,45 @@ def read_stream(source: Any, activity_id: int) -> tuple[Optional[StreamParse], b
         try:
             details = source.get(path)
         except gp.PersonalNotFound:
-            return StreamParse(), True
+            return StreamParse(absent=True), True
     if details is None:
-        return StreamParse(), fallback
+        return StreamParse(absent=True), fallback
     return parse_hr_stream(details), fallback
+
+
+def details_shape(details: Any) -> dict[str, Any]:
+    """The SHAPE of one details payload, no reading in it: counts, booleans, the descriptor indices of the
+    timestamp and HR columns, and the TYPE NAMES of the first row's cells at those indices. For the
+    backfill's `--diagnose`, which settles why a stream parsed to nothing."""
+    if not isinstance(details, dict):
+        return {"payload": type(details).__name__}
+    rows = details.get("activityDetailMetrics")
+    rows = rows if isinstance(rows, list) else None
+    desc = details.get("metricDescriptors")
+    raw_idx = {d.get("key"): d.get("metricsIndex") for d in desc if isinstance(d, dict)} if isinstance(desc, list) else {}
+    first = next((r.get("metrics") for r in rows or [] if isinstance(r, dict) and r.get("metrics")), None)
+
+    def cell_type(key):
+        i = raw_idx.get(key)
+        if not isinstance(i, int) or isinstance(i, bool) or not isinstance(first, list) or i >= len(first):
+            return None
+        return type(first[i]).__name__
+
+    parsed = parse_hr_stream(details)
+    return {
+        "rows": None if rows is None else len(rows),
+        "rows_type": type(details.get("activityDetailMetrics")).__name__,
+        "metricsCount": details.get("metricsCount") if isinstance(details.get("metricsCount"), int) else None,
+        "totalMetricsCount": parsed.total_rows,
+        "measurementCount": details.get("measurementCount") if isinstance(details.get("measurementCount"), int) else None,
+        "detailsAvailable": parsed.details_available,
+        "descriptors": len(desc) if isinstance(desc, list) else None,
+        "ts_index": raw_idx.get(TS_KEY) if isinstance(raw_idx.get(TS_KEY), int) else type(raw_idx.get(TS_KEY)).__name__,
+        "hr_index": raw_idx.get(HR_KEY) if isinstance(raw_idx.get(HR_KEY), int) else type(raw_idx.get(HR_KEY)).__name__,
+        "first_row_len": len(first) if isinstance(first, list) else None,
+        "ts_cell": cell_type(TS_KEY), "hr_cell": cell_type(HR_KEY),
+        "samples": len(parsed.samples), "null_bpm": parsed.null_bpm, "empty_reason": parsed.empty_reason,
+    }
 
 
 def capture_stream(db: Session, user_id: int, source: Any, row: models.GarminActivityMetric, *,
@@ -257,18 +323,20 @@ def capture_stream(db: Session, user_id: int, source: Any, row: models.GarminAct
     stays unmarked, so the next run retries it)."""
     parsed, fallback = read_stream(source, row.garmin_activity_id)
     stored = store_stream_samples(db, user_id, parsed.samples)
-    row.hr_stream_fetched_at = now
-    row.hr_stream_samples = len(parsed.samples)
+    if parsed.conclusive:                       # an unexplained empty stays unmarked, so the next run retries it
+        row.hr_stream_fetched_at = now
+        row.hr_stream_samples = len(parsed.samples)
     if parsed.thinned:
         logger.warning("garmin stream: activity %s thinned: %s of %s rows, effective interval %s s",
                        row.garmin_activity_id, parsed.rows, parsed.total_rows, parsed.interval_s)
     return {"found": len(parsed.samples), "stored": stored, "thinned": parsed.thinned,
-            "param_fallback": fallback, "interval_s": parsed.interval_s, "has_hr": parsed.has_hr}
+            "param_fallback": fallback, "interval_s": parsed.interval_s, "has_hr": parsed.has_hr,
+            "marked": parsed.conclusive, "empty_reason": parsed.empty_reason, "null_bpm": parsed.null_bpm}
 
 
 def new_stream_counts() -> dict[str, int]:
     return {"stream_fetched": 0, "stream_samples": 0, "stream_thinned": 0, "stream_param_fallback": 0,
-            "stream_errors": 0}
+            "stream_unmarked": 0, "stream_errors": 0}
 
 
 def sync_streams(db: Session, user_id: int, source: Any, *, now: Optional[datetime] = None,
@@ -297,4 +365,5 @@ def sync_streams(db: Session, user_id: int, source: Any, *, now: Optional[dateti
         out["stream_samples"] += res["stored"]
         out["stream_thinned"] += int(res["thinned"])
         out["stream_param_fallback"] += int(res["param_fallback"])
+        out["stream_unmarked"] += int(not res["marked"])
     return out

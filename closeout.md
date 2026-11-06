@@ -104,3 +104,16 @@ Metrics - Echo Bike Zones Review`. Each step against where it landed:
 3. The same command with `--confirm`.
 
 Paste the count lines. Then open the Training page, and ask chat to read `get_recent_sessions` and `get_zone_coverage`.
+
+## Addendum — the empty-stream follow-up (#509)
+
+After GH#642 merged (`02a7fcc`, `deploy-check` SUCCESS on both services), the operator ran the backfill dry run.
+
+| Run | Activities | With HR | Samples | Median interval | Thinned | Fallback |
+|---|---|---|---|---|---|---|
+| `--limit 5` | 5 | 0 | 0 | none | 1 | 0 |
+| full | 104 | 24 | 25,778 | 1.0 s | 11 | 0 |
+
+The parser and the resolution request are confirmed: Garmin accepted `maxChartSize`, and the streams that carry HR come back at 1 s. The 80 empty streams could not be explained from the counts, and the deployed capture would have closed each one on first read. #509 (this branch restarted from `02a7fcc`, a self-merged two-way PR) closes a stream only when the result explains itself. It counts the reason for every empty stream and adds `--diagnose`.
+
+**Next action (operator).** Once this PR's deploy check is green, re-run the dry run and paste its `empty_reasons`. If it shows `no_rows` or `hr_column_no_samples`, run `--diagnose --activity-id <one of them>`. Then run `--confirm`, since only explained streams are closed.

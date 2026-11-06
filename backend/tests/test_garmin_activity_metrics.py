@@ -218,7 +218,7 @@ def test_the_stream_is_written_under_r2_only_with_full_resolution_asked(db_sessi
     samples = _stream(db_session)
     assert len(samples) == 60 and {(s.source, s.source_package) for s in samples} == {("garmin", "activity_details")}
     assert out == {"stream_fetched": 1, "stream_samples": 60, "stream_thinned": 0, "stream_param_fallback": 0,
-                   "stream_errors": 0}
+                   "stream_unmarked": 0, "stream_errors": 0}
     (_, path, params), = host.requests
     assert path.endswith(f"/{AID}/details") and params == {"maxChartSize": "100000", "maxPolylineSize": "0"}
     (m,) = _metric_rows(db_session)
@@ -284,6 +284,55 @@ def test_the_sweep_reads_ratings_metrics_and_streams_and_sums_the_counts(db_sess
     summary = garmin_sync.sweep_garmin_hrv(db_session, personal_transport=host.transport())
     ev = summary["selfeval"]
     assert (ev["rated"], ev["metrics_upserted"], ev["stream_fetched"], ev["stream_samples"], ev["errors"]) == (1, 1, 1, 30, 0)
+
+
+# -- 3b. an unexplained empty stream is never recorded as "no HR" (6 Nov 2026 dry run) ---------------------
+
+def _empty(**over):
+    d = _details([])
+    d.update(over)
+    return d
+
+
+@pytest.mark.parametrize("payload, conclusive, reason", [
+    (_details(_ride(seconds=3)), True, None),
+    (_empty(detailsAvailable=False), True, "details_unavailable"),
+    (_empty(totalMetricsCount=0), True, "no_rows_total_0"),
+    (_empty(totalMetricsCount=3712), False, "no_rows"),                       # Garmin says rows exist: unexplained
+    ({**_empty(), "totalMetricsCount": None}, False, "no_rows"),
+])
+def test_which_empty_results_may_close_a_stream(payload, conclusive, reason):
+    p = gam.parse_hr_stream(payload)
+    assert (p.conclusive, p.empty_reason) == (conclusive, reason)
+
+
+def test_rows_without_an_hr_column_close_it_but_an_hr_column_of_nulls_does_not():
+    no_hr = _details(_ride(seconds=3))
+    no_hr["metricDescriptors"] = [x for x in no_hr["metricDescriptors"] if x["key"] != "directHeartRate"]
+    assert (gam.parse_hr_stream(no_hr).conclusive, gam.parse_hr_stream(no_hr).empty_reason) == (True, "no_hr_column")
+    nulls = gam.parse_hr_stream(_details([(_ms(START), None), (_ms(START) + 1000, None)]))
+    assert (nulls.conclusive, nulls.empty_reason, nulls.null_bpm) == (False, "hr_column_no_samples", 2)
+    assert gam.StreamParse(absent=True).conclusive and gam.StreamParse(absent=True).empty_reason == "absent"
+
+
+def test_an_unexplained_empty_stays_unmarked_and_is_retried_next_run(db_session):
+    _user(db_session)
+    _metrics_row(db_session)
+    host = _host(_empty(totalMetricsCount=3712))
+    with gp.PersonalClient(FAKE_KEY, transport=host.transport()) as client:
+        first = gam.sync_streams(db_session, 1, client, now=NOW)
+        again = gam.sync_streams(db_session, 1, client, now=NOW)
+    assert first["stream_unmarked"] == 1 and first["stream_errors"] == 0 and again["stream_fetched"] == 1
+    assert len(host.requests) == 2 and _metric_rows(db_session)[0].hr_stream_fetched_at is None
+
+
+def test_details_shape_reports_counts_indices_and_cell_types_never_a_reading():
+    shape = gam.details_shape(_details(_ride(seconds=4, bpm=131), shuffle=True, total=5))
+    assert shape == {"rows": 5, "rows_type": "list", "metricsCount": 5, "totalMetricsCount": 5, "measurementCount": 3,
+                     "detailsAvailable": True, "descriptors": 3, "ts_index": 1, "hr_index": 2, "first_row_len": 3,
+                     "ts_cell": "int", "hr_cell": "float", "samples": 5, "null_bpm": 0, "empty_reason": None}
+    assert "131" not in str(shape) and str(_ms(START)) not in str(shape)
+    assert gam.details_shape([1])["payload"] == "list"
 
 
 # -- 4. zoning: a Garmin HC row may read the activity stream, densest alone ---------------------------

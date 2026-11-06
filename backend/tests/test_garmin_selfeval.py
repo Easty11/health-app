@@ -348,7 +348,7 @@ def test_the_sweep_reads_each_personal_users_self_evaluation_after_their_hrv_pul
     assert summary["selfeval"] == {"fetched": 2, "rated": 2, "unrated": 0, "skipped_needs_refresh": 0, "errors": 0,
                                    "metrics_upserted": 2, "metrics_errors": 0, "stream_fetched": 2,
                                    "stream_samples": 0, "stream_thinned": 0, "stream_param_fallback": 0,
-                                   "stream_errors": 0}     # no details route on the fake host: 404, captured empty
+                                   "stream_unmarked": 0, "stream_errors": 0}     # no details route on the fake host: 404, captured empty
 
 
 def test_a_refused_key_user_gets_no_read_and_the_others_are_unaffected(db_session, monkeypatch):
