@@ -117,3 +117,22 @@ After GH#642 merged (`02a7fcc`, `deploy-check` SUCCESS on both services), the op
 The parser and the resolution request are confirmed: Garmin accepted `maxChartSize`, and the streams that carry HR come back at 1 s. The 80 empty streams could not be explained from the counts, and the deployed capture would have closed each one on first read. #509 (this branch restarted from `02a7fcc`, a self-merged two-way PR) closes a stream only when the result explains itself. It counts the reason for every empty stream and adds `--diagnose`.
 
 **Next action (operator).** Once this PR's deploy check is green, re-run the dry run and paste its `empty_reasons`. If it shows `no_rows` or `hr_column_no_samples`, run `--diagnose --activity-id <one of them>`. Then run `--confirm`, since only explained streams are closed.
+
+## Addendum — backfill outcome, coordinates, recovery time (#510)
+
+The operator ran the backfill live after #509 deployed.
+
+| Count | Value |
+|---|---|
+| Activities listed | 104 (10 already captured by a lane run) |
+| Metrics rows written | 94 |
+| HR samples written | 25,778 from 24 activities |
+| Median interval | 1.0 s |
+| Empty streams | 70: 52 details unavailable, 18 no HR column |
+| Left open | 0 |
+
+The seven "thinned" warnings were all activities whose details are unavailable (0 rows returned, Garmin reports 1), so no HR stream was thinned. The resolution question is closed. Chat's `get_recent_sessions` shows the 5 Nov ride as `garmin=[kcal 581 TE 5.0 aerobic / 3.1 anaerobic load 276]`, with TE and load as the brief expected.
+
+The operator asked whether recovery hours are included. They are not on the activity: the key read of every stored `summary_raw` gave 74 keys and no recovery-time key, only `recoveryHeartRate`. The same read showed start and end coordinates. #510 drops them at write, and `scripts/garmin_activity_scrub.py` clears them from the stored rows. `scripts/garmin_readiness_probe.py` asks whether the Personal API serves the daily readiness / status endpoints, where recovery time lives.
+
+**Next action (operator).** In `railway ssh`, run `/opt/venv/bin/python -m scripts.garmin_activity_scrub` (dry run), then with `--confirm`. Run `/opt/venv/bin/python -m scripts.garmin_readiness_probe --user-id 1` and paste its output. Open the Training page, then ask chat for `get_zone_coverage`; Health Connect's withheld count was 34 of 75 before the chain re-ran.
