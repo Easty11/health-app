@@ -20,6 +20,7 @@ ALLOWED = {
     "garmin_selfeval.py",                                     # calls the summary upsert on the same detail
     "scripts/garmin_sync.py",                                 # runs the stream pass in the selfeval lane
     "scripts/garmin_activity_backfill.py",                    # the operator backfill
+    "scripts/garmin_activity_scrub.py",                       # the operator location scrub (summary_raw only)
     "reads/garmin_metrics_reads.py",                          # the one read door
     "routers/polar.py",                                       # the sessions API (display)
     "mcp_server.py",                                          # get_recent_sessions (display)

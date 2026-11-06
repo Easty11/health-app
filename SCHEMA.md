@@ -2140,7 +2140,7 @@ CREATE TABLE garmin_activity_metrics (
     intensity_min_moderate FLOAT, intensity_min_vigorous FLOAT,
     water_estimated_ml     FLOAT,                         -- <- waterEstimated
     body_battery_delta     FLOAT,                         -- <- differenceBodyBattery
-    summary_raw            JSONB NOT NULL,                -- the whole summaryDTO: a field wanted later needs no re-fetch
+    summary_raw            JSONB NOT NULL,                -- the summaryDTO minus location keys (*Latitude / *Longitude): a field wanted later needs no re-fetch
     fetched_at             TIMESTAMPTZ NOT NULL,
     hr_stream_fetched_at   TIMESTAMPTZ,                   -- the activity HR stream was fetched (once)
     hr_stream_samples      INTEGER,                       -- samples it gave (null bpm skipped)
@@ -2154,4 +2154,5 @@ CREATE INDEX ix_garmin_activity_metrics_user_id ON garmin_activity_metrics (user
 - **No session link (ruling R1).** `reads.garmin_metrics_reads.garmin_metrics_by_session` places a row on a session by read-time window overlap (`reads.srpe_reads._place`, the RPE placement rule), from `start_time_gmt` and `duration_s`. The sessions API (`GET /integrations/polar/aerobic-sessions`) carries the placed dict as `garmin_metrics` on canonical rows.
 - **Writers.** `garmin_selfeval.sync_user` upserts from the activity detail it already fetches (no extra request; soft-fail, `metrics_errors`); `garmin_activity_metrics.sync_streams` (the selfeval lane, after the read; up to 10 a night) sets the `hr_stream_*` columns; `scripts/garmin_activity_backfill.py` (operator, dry run by default) does both from 2026-03-01.
 - **The HR stream lives in `hr_samples`**, not here: `directHeartRate` by `directTimestamp` from `/activity-service/activity/{id}/details`, column positions resolved from `metricDescriptors` by key, written as `source = 'garmin'`, `source_package = 'activity_details'` (ruling R2), a writer distinct from the all-day `garmin` / `personal_api` wellness lane. `hc_zone_enrich.sample_writers_for` lets a `health_connect` row written by `com.garmin.android.apps.connectmobile` read it besides its own HC trace, the densest stream per bout alone (#506's rule); no other row type reads it and the wellness lane is never read for a session. The request asks `maxChartSize=100000` and `maxPolylineSize=0`, retries once without them on HTTP 400, and reports thinning (`totalMetricsCount` above the rows returned) with the effective interval.
+- **No location.** Every key ending in Latitude or Longitude is dropped before `summary_raw` is written (`garmin_activity_metrics.scrub_location`, #510); `scripts/garmin_activity_scrub.py` (operator, dry run by default) removed them from the rows written before that.
 - **Downgrade** drops the table; every row is re-fetchable (the backfill).

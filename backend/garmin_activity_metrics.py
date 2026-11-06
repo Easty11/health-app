@@ -7,7 +7,8 @@ Two writes, both soft-fail, both reading Garmin only through the caller's `sourc
    self-evaluation lane (`garmin_selfeval`) already fetched, so the summary costs no extra request. The
    keys are the operator's 6 Nov 2026 `--keys` probe (activity 24970929418): `trainingEffect` is the
    AEROBIC Training Effect (there is no `aerobicTrainingEffect` key). Every metric is stored as received;
-   a missing or non-numeric key is NULL, never an error. The whole `summaryDTO` is kept in `summary_raw`.
+   a missing or non-numeric key is NULL, never an error. The `summaryDTO` is kept in `summary_raw` minus its
+   location keys (`scrub_location`).
    DISPLAY ONLY: nothing here feeds Pocket load or readiness (a guard test pins it).
 
 2. THE ACTIVITY HR STREAM -> `hr_samples` as `garmin` / `activity_details` (ruling R2): a writer of its
@@ -29,6 +30,7 @@ thinning report says what that cost.
 from __future__ import annotations
 
 import logging
+import re
 import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -74,6 +76,29 @@ NUMERIC_FIELDS: dict[str, str] = {
 TEXT_FIELDS: dict[str, str] = {"trainingEffectLabel": "te_label"}
 _TEXT_MAX = 64
 
+# Location keys are never stored (6 Nov 2026: `summary_raw` carried `startLatitude` / `startLongitude` /
+# `endLatitude` / `endLongitude`, which for a session at home are the home's coordinates, and nothing reads
+# them). Any key ending in Latitude or Longitude, at any depth, is dropped before the payload is kept.
+LOCATION_KEY = re.compile(r"(latitude|longitude)$", re.IGNORECASE)
+
+
+def scrub_location(obj: Any) -> Any:
+    """`obj` with every key matching `LOCATION_KEY` removed, at any depth (a new structure; `obj` untouched)."""
+    if isinstance(obj, dict):
+        return {k: scrub_location(v) for k, v in obj.items() if not LOCATION_KEY.search(str(k))}
+    if isinstance(obj, list):
+        return [scrub_location(v) for v in obj]
+    return obj
+
+
+def location_keys(obj: Any) -> int:
+    """How many location keys `obj` holds, at any depth (the scrub script's count)."""
+    if isinstance(obj, dict):
+        return sum(1 + location_keys(v) if LOCATION_KEY.search(str(k)) else location_keys(v) for k, v in obj.items())
+    if isinstance(obj, list):
+        return sum(location_keys(v) for v in obj)
+    return 0
+
 
 def _utc(dt: Optional[datetime]) -> Optional[datetime]:
     if dt is None:
@@ -114,7 +139,7 @@ def parse_metrics(summary: Any, *, start: Optional[datetime] = None,
     out["start_time_gmt"] = _parse_gmt(summary.get("startTimeGMT")) or _utc(start)
     if out["duration_s"] is None and duration_s is not None:
         out["duration_s"] = _num(duration_s)
-    out["summary_raw"] = summary
+    out["summary_raw"] = scrub_location(summary)
     return out
 
 
